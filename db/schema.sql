@@ -149,8 +149,12 @@ create table if not exists actuaciones (
   es_nueva         boolean not null default true, -- true hasta que se notifica
   creado_en        timestamptz not null default now()
 );
-create unique index if not exists uq_actuaciones_reg
-  on actuaciones (id_reg_actuacion) where id_reg_actuacion is not null;
+-- NOTA: debe ser una restricción UNIQUE normal (no un índice parcial con WHERE),
+-- porque el código usa upsert(...).onConflict('id_reg_actuacion') y Postgres solo
+-- reconoce ON CONFLICT contra una unique constraint/index que cubra la columna sin
+-- predicado. Un índice parcial causaba el error 42P10 y las actuaciones nunca se
+-- guardaban (bug detectado y corregido 2026-08-03).
+alter table actuaciones add constraint uq_actuaciones_reg unique (id_reg_actuacion);
 create index if not exists idx_actuaciones_proceso on actuaciones (proceso_id, cons_actuacion desc);
 
 -- ---------------------------------------------------------------------

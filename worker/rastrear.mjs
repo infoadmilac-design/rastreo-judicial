@@ -136,6 +136,7 @@ async function correrSupabase() {
       const { data: ult } = await db.from('actuaciones')
         .select('cons_actuacion').eq('proceso_id', p.id)
         .order('cons_actuacion', { ascending: false }).limit(1).maybeSingle();
+      const esPrimeraVez = !ult;   // sin fila alguna todavía = línea base, no alertar por ruido histórico
       const consGuardada = ult?.cons_actuacion ?? -1;
       const fechaGuardada = p.fecha_ultima_actuacion || null;
 
@@ -147,17 +148,21 @@ async function correrSupabase() {
         const rows = r.nuevas.map(a => ({
           proceso_id: p.id, id_reg_actuacion: a.idRegActuacion, cons_actuacion: a.consActuacion,
           fecha_actuacion: a.fechaActuacion, fecha_registro: a.fechaRegistro,
-          tipo: a.tipo, anotacion: a.anotacion, con_documentos: a.conDocumentos, es_nueva: true,
+          tipo: a.tipo, anotacion: a.anotacion, con_documentos: a.conDocumentos, es_nueva: !esPrimeraVez,
         }));
-        const { data: ins } = await db.from('actuaciones')
+        const { data: ins, error: errIns } = await db.from('actuaciones')
           .upsert(rows, { onConflict: 'id_reg_actuacion', ignoreDuplicates: true }).select('id, anotacion, fecha_actuacion');
-        // Crear una alerta por cada actuación nueva insertada
-        if (ins?.length) {
+        if (errIns) {
+          console.log(`   ❌ ${p.radicado} error al guardar actuaciones: ${errIns.message}`);
+          errores++;
+        } else if (ins?.length && !esPrimeraVez) {
+          // Solo se alerta si YA había línea base (esto es un cambio real, no historia inicial)
           conCambios++; totalNuevas += ins.length;
-          await db.from('alertas').insert(ins.map(a => ({
+          const { error: errAl } = await db.from('alertas').insert(ins.map(a => ({
             proceso_id: p.id, actuacion_id: a.id, tipo: 'nueva_actuacion',
             titulo: `Nueva actuación en ${p.radicado}`, detalle: a.anotacion?.slice(0, 500), estado: 'pendiente',
           })));
+          if (errAl) console.log(`   ❌ ${p.radicado} error al crear alerta: ${errAl.message}`);
         }
       }
       // Actualizar cache del proceso

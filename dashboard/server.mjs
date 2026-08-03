@@ -142,6 +142,7 @@ const data = {
           const { data: ult } = await db.from('actuaciones')
             .select('cons_actuacion').eq('proceso_id', proc.id)
             .order('cons_actuacion', { ascending: false }).limit(1).maybeSingle();
+          const esPrimeraVez = !ult;
           const tope = ult?.cons_actuacion ?? -1;
           const nuevas = actuaciones.filter(a => (a.consActuacion ?? 0) > tope);
 
@@ -150,12 +151,15 @@ const data = {
             const rows = nuevas.map(a => ({
               proceso_id: proc.id, id_reg_actuacion: a.idRegActuacion, cons_actuacion: a.consActuacion,
               fecha_actuacion: a.fechaActuacion, fecha_registro: a.fechaRegistro,
-              tipo: a.tipo, anotacion: a.anotacion, con_documentos: a.conDocumentos, es_nueva: true,
+              tipo: a.tipo, anotacion: a.anotacion, con_documentos: a.conDocumentos, es_nueva: !esPrimeraVez,
             }));
-            const { data: ins } = await db.from('actuaciones')
+            const { data: ins, error: errIns } = await db.from('actuaciones')
               .upsert(rows, { onConflict: 'id_reg_actuacion', ignoreDuplicates: true })
               .select('id, anotacion, fecha_actuacion');
-            if (ins?.length) {
+            if (errIns) {
+              throw new Error('No se pudo guardar la revisión: ' + errIns.message);
+            }
+            if (ins?.length && !esPrimeraVez) {
               guardadas = ins.length;
               await db.from('alertas').insert(ins.map(a => ({
                 proceso_id: proc.id, actuacion_id: a.id, tipo: 'nueva_actuacion',
