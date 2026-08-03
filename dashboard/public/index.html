@@ -147,6 +147,7 @@
     </div>
     <nav id="nav">
       <button data-t="inicio" class="act"><span class="ico">🏠</span> Inicio</button>
+      <button data-t="consulta"><span class="ico">📡</span> Consulta en vivo</button>
       <button data-t="procesos"><span class="ico">📁</span> Procesos <span class="badge" id="b-proc">·</span></button>
       <button data-t="cambios"><span class="ico">🔔</span> Cambios <span class="badge" id="b-camb">·</span></button>
       <button data-t="notificaciones"><span class="ico">📤</span> Notificaciones</button>
@@ -289,6 +290,21 @@ const vistas={
       : empty('📅','Sin audiencias registradas','');
   },
 
+  async consulta(){
+    content.innerHTML=`
+      <div class="note" style="margin-bottom:14px">📡 Busca un <b>radicado de 23 dígitos</b> o el <b>nombre</b> de una persona directamente en la Rama Judicial (en vivo, no en tu base local). Si el proceso ya está en tu sistema, esta consulta <b>hace la revisión ahora mismo</b> y guarda cualquier actuación nueva.</div>
+      <div class="toolbar">
+        <input id="cv-input" placeholder="Ej: 25000233600020210033100  ó  Juan Pérez" style="flex:1;min-width:240px;padding:10px 14px;border:1px solid var(--line);border-radius:9px;font-size:14px">
+        <button class="btn" id="cv-btn">🔎 Consultar en la Rama Judicial</button>
+      </div>
+      <div id="cv-resultado"></div>`;
+    const input=$('#cv-input'), btn=$('#cv-btn');
+    const ejecutar=()=>consultaVivaEjecutar(input.value);
+    btn.onclick=ejecutar;
+    input.onkeydown=e=>{if(e.key==='Enter')ejecutar();};
+    input.focus();
+  },
+
   async plantillas(){
     const rows=await api('/plantillas');
     content.innerHTML=`<div class="note" style="margin-bottom:14px">📝 Plantillas de respuesta. Usa las variables <span class="var">{{radicado}}</span> <span class="var">{{cliente}}</span> <span class="var">{{actuacion}}</span> <span class="var">{{fecha}}</span> — se reemplazan al usarlas.</div>`+
@@ -297,6 +313,89 @@ const vistas={
         <button class="mini" style="margin-left:auto" onclick='copiar(${JSON.stringify(t.cuerpo)})'>📋 Copiar</button></div>
         <div class="cuerpo">${resaltarVars(t.cuerpo)}</div></div>`).join('')
       : empty('📝','Sin plantillas','')); }
+};
+
+// ---- Consulta en vivo (Rama Judicial) ----
+async function consultaVivaEjecutar(valor){
+  const q=(valor||'').trim();
+  const cont=$('#cv-resultado');
+  if(!q){cont.innerHTML='';return;}
+  cont.innerHTML=`<div class="empty"><div class="big">⏳</div><b>Consultando la Rama Judicial…</b><div class="sub" style="margin-top:4px">Puede tardar unos segundos.</div></div>`;
+  try{
+    const r=await api('/consulta-viva?q='+encodeURIComponent(q));
+    pintarConsultaViva(r);
+  }catch(e){
+    cont.innerHTML=`<div class="empty"><div class="big">⚠️</div><b>No se pudo consultar</b><div class="sub" style="margin-top:4px">${esc(e.message)}</div></div>`;
+  }
+}
+function pintarConsultaViva(r){
+  const cont=$('#cv-resultado');
+  if(r.tipo==='radicado'){
+    if(!r.encontrado){
+      cont.innerHTML=empty('🔍','No se encontró ese radicado en la Rama Judicial','Verifica que tenga los 23 dígitos completos.');
+      return;
+    }
+    const info=r.info;
+    let banner='';
+    if(r.enBaseLocal){
+      banner=r.revision?.nuevasGuardadas
+        ? `<div class="note" style="background:var(--okbg);border-color:#bfe6cd;color:#155c33">✅ <b>Revisión hecha ahora mismo:</b> se detectaron y guardaron <b>${r.revision.nuevasGuardadas}</b> actuación(es) nueva(s). Ya quedaron como alertas pendientes.</div>`
+        : `<div class="note">✓ Este proceso ya está en tu sistema. Se revisó ahora mismo: <b>sin cambios</b> desde la última vez.</div>`;
+    } else {
+      banner=`<div class="note">ℹ️ Este radicado <b>no está en tu sistema</b> todavía. Puedes agregarlo desde aquí.</div>`;
+    }
+    cont.innerHTML=`
+      ${banner}
+      <div class="panel" style="margin-top:14px">
+        <h3>📄 ${esc(info.radicado)}</h3>
+        <div class="body" style="padding:16px">
+          <div class="kv">
+            <div class="k">Cliente</div><div>${esc(r.cliente||'—')} ${r.enBaseLocal?'<span class="tag si">en tu sistema</span>':'<span class="tag no">no registrado</span>'}</div>
+            <div class="k">Despacho</div><div>${esc(info.despacho||'—')}</div>
+            <div class="k">Departamento</div><div>${esc(info.departamento||'—')}</div>
+            <div class="k">Sujetos</div><div>${esc((info.sujetos||'').slice(0,200))}</div>
+            <div class="k">Últ. actuación</div><div>${fdate(info.fechaUltimaActuacion)||'—'}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+            <button class="btn sec" onclick="copiar('${esc(info.radicado)}')">📋 Copiar radicado</button>
+            ${!r.enBaseLocal?`<button class="btn" onclick="cvAgregar('${esc(info.radicado)}','${esc((info.despacho||'').replace(/'/g,"\\'"))}')">＋ Agregar a mis procesos</button>`:''}
+          </div>
+          <b style="color:var(--navy);font-size:13.5px">Actuaciones recientes (${r.actuaciones.length}):</b>
+          <div style="margin-top:8px">${r.actuaciones.map(a=>`
+            <div class="act" style="border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:7px">
+              <div class="sub">${fdate(a.fechaActuacion)}</div>
+              <b style="font-size:13px;color:var(--navy)">${esc(a.tipo)}</b>
+              <div style="font-size:13px;margin-top:2px">${esc((a.anotacion||'').slice(0,300))}</div>
+            </div>`).join('')}</div>
+        </div>
+      </div>`;
+    return;
+  }
+  // tipo === 'nombre'
+  if(!r.resultados.length){
+    cont.innerHTML=empty('🔍','Sin resultados en la Rama Judicial','Prueba con el nombre completo o el número de radicado.');
+    return;
+  }
+  cont.innerHTML=`<div class="tablewrap" style="margin-top:14px"><table><thead><tr>
+      <th>Radicado</th><th>Despacho</th><th>Sujetos</th><th>Últ. actuación</th><th>En tu sistema</th></tr></thead>
+    <tbody>${r.resultados.map(x=>`<tr onclick="consultaVivaEjecutar('${esc(x.radicado)}');$('#cv-input').value='${esc(x.radicado)}';">
+      <td class="radbtn">${esc(x.radicado||'—')}</td>
+      <td>${esc((x.despacho||'').slice(0,42))}</td>
+      <td>${esc((x.sujetos||'').slice(0,60))}</td>
+      <td>${fdate(x.fechaUltimaActuacion)}</td>
+      <td>${x.enBaseLocal?'<span class="tag si">Sí</span>':'<span class="tag no">No</span>'}</td>
+    </tr>`).join('')}</tbody></table></div>
+    <div class="sub" style="padding:10px 4px">Haz clic en un resultado para ver el detalle y hacer la revisión.</div>`;
+}
+window.cvAgregar=async(radicado,despacho)=>{
+  try{
+    await api('/procesos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      radicado, despacho:despacho||null, sede:'generales', estado:'activo', tipo_id:'radicado_23', api_trackable:true,
+    })});
+    toast('Proceso agregado ✓');
+    cargarStats();
+    consultaVivaEjecutar(radicado);
+  }catch(e){alert('Error: '+e.message);}
 };
 
 // ---- Procesos: filtro + tabla + detalle ----
@@ -368,7 +467,7 @@ $('#dlgSave').onclick=async()=>{const rad=$('#f_radicado').value.trim();
     dlg.close();toast('Guardado ✓');pintarProcesos();cargarStats();}catch(e){alert('Error: '+e.message);}};
 
 // ---- Navegación ----
-const titulos={inicio:'Inicio',procesos:'Procesos',cambios:'Cambios y alertas',notificaciones:'Notificaciones',vencimientos:'Vencimientos',plantillas:'Plantillas'};
+const titulos={inicio:'Inicio',consulta:'Consulta en vivo',procesos:'Procesos',cambios:'Cambios y alertas',notificaciones:'Notificaciones',vencimientos:'Vencimientos',plantillas:'Plantillas'};
 window.ir=t=>{$$('#nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===t));$('#titulo').textContent=titulos[t];$('#aside').classList.remove('show');vistas[t]();};
 $('#nav').onclick=e=>{const b=e.target.closest('button');if(b)ir(b.dataset.t);};
 $('#gsearch').oninput=e=>{busq=e.target.value;clearTimeout(window._t);window._t=setTimeout(()=>{

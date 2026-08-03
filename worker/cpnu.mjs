@@ -15,7 +15,11 @@ async function getJSON(url, { reintentos = 3 } = {}) {
     try {
       const r = await fetch(url, { headers: HEADERS });
       if (r.status === 429 || r.status >= 500) { await sleep(1000 * (i + 1)); continue; }
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) {
+        // La API suele devolver un mensaje útil en el cuerpo (ej. "sé más específico")
+        const cuerpo = await r.json().catch(() => null);
+        throw new Error(cuerpo?.Message || cuerpo?.message || `HTTP ${r.status}`);
+      }
       return await r.json();
     } catch (e) { err = e; await sleep(600 * (i + 1)); }
   }
