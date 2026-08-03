@@ -11,6 +11,9 @@ on:
 jobs:
   rastrear-y-notificar:
     runs-on: ubuntu-latest
+    # Con el ritmo seguro (pausas 3-5min para no bloquear el servidor de la Rama,
+    # ver docs/api-cpnu.md) 163 procesos pueden tardar 70+ min.
+    timeout-minutes: 150
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -32,4 +35,7 @@ jobs:
         run: cd worker && node rastrear.mjs
 
       - name: Notificar alertas pendientes por correo
+        # continue-on-error: hasta que se configuren RESEND_API_KEY/EMAIL_CENTRAL,
+        # este paso fallará pero no debe tumbar el rastreo (que ya quedó guardado en Supabase).
+        continue-on-error: true
         run: cd notify && node notificar.mjs

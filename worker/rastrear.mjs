@@ -129,7 +129,8 @@ async function correrSupabase() {
   console.log(`\n🔎 Rastreando ${procesos.length} procesos contra el API…\n`);
 
   let conCambios = 0, totalNuevas = 0, errores = 0;
-  for (const p of procesos) {
+  for (let i = 0; i < procesos.length; i++) {
+    const p = procesos[i];
     try {
       // consGuardada = mayor consActuacion ya almacenado para este proceso
       const { data: ult } = await db.from('actuaciones')
@@ -167,6 +168,12 @@ async function correrSupabase() {
       }).eq('id', p.id);
     } catch (e) { console.log(`   ❌ ${p.radicado} ${e.message}`); errores++; }
     await sleep(PAUSA_MS);
+    // Mismo respiro de 3-5 min que en dry-run: evita el bloqueo 403 del servidor de la Rama
+    if ((i + 1) % RESPIRO_CADA === 0 && i + 1 < procesos.length) {
+      const ms = respiroAleatorio();
+      console.log(`   … respiro de ${Math.round(ms / 1000)}s (${i + 1}/${procesos.length})`);
+      await sleep(ms);
+    }
   }
   console.log(`\n===== RESUMEN =====`);
   console.log(`Procesos con novedades : ${conCambios}`);
