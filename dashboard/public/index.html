@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rastreo Judicial · Panel de Control</title>
+<style>
+  :root{
+    --navy:#14315e; --navy2:#1e4a86; --accent:#c8860d; --bg:#eef1f6; --panel:#fff;
+    --line:#e4e9f0; --txt:#1f2a3a; --mut:#6b7a90; --ok:#1a7f43; --okbg:#e5f6ec;
+    --warn:#b23; --warnbg:#fdeaea; --info:#2a5aa0; --infobg:#e8f0fe; --soft:#f7f9fc;
+    --radius:12px; --shadow:0 1px 3px rgba(20,49,94,.06),0 4px 16px rgba(20,49,94,.05);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  a{color:var(--navy2);text-decoration:none}
+  .app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+
+  /* Sidebar */
+  aside{background:var(--navy);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+  .brand{padding:20px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.1)}
+  .brand .logo{width:34px;height:34px;background:var(--accent);border-radius:9px;display:grid;place-items:center;font-size:18px}
+  .brand b{font-size:15px;line-height:1.15}
+  .brand span{display:block;font-size:11px;color:#a9bbd6;font-weight:400}
+  nav{padding:10px 10px;flex:1}
+  nav button{width:100%;display:flex;align-items:center;gap:11px;background:none;border:none;color:#c3d1e6;
+    padding:11px 12px;border-radius:9px;font-size:14px;cursor:pointer;text-align:left;margin-bottom:2px}
+  nav button .ico{width:20px;text-align:center;font-size:15px}
+  nav button .badge{margin-left:auto;background:rgba(255,255,255,.14);color:#fff;font-size:11px;padding:1px 8px;border-radius:20px;min-width:22px;text-align:center}
+  nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+  nav button.act{background:#fff;color:var(--navy);font-weight:600}
+  nav button.act .badge{background:var(--accent);color:#fff}
+  .side-foot{padding:14px 16px;font-size:11px;color:#8ea4c6;border-top:1px solid rgba(255,255,255,.1)}
+
+  /* Topbar */
+  main{display:flex;flex-direction:column;min-width:0}
+  .top{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:5}
+  .top h2{margin:0;font-size:17px;font-weight:650}
+  .search{margin-left:auto;position:relative}
+  .search input{width:300px;max-width:42vw;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:22px;font-size:14px;background:var(--soft)}
+  .search .mag{position:absolute;left:12px;top:9px;color:var(--mut)}
+  .modo{font-size:12px;padding:5px 11px;border-radius:20px;white-space:nowrap}
+  .modo.demo{background:#fff7e6;color:#8a6d3b;border:1px solid #ffe1a8}
+  .modo.real{background:var(--okbg);color:var(--ok);border:1px solid #bfe6cd}
+
+  .content{padding:22px;overflow:auto}
+
+  /* Cards / stats */
+  .grid{display:grid;gap:14px}
+  .stats{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow)}
+  .stat .n{font-size:28px;font-weight:750;color:var(--navy);line-height:1}
+  .stat .l{font-size:12.5px;color:var(--mut);margin-top:6px;display:flex;align-items:center;gap:6px}
+  .stat .l .dot{width:8px;height:8px;border-radius:50%}
+  .two{grid-template-columns:1fr 1fr}
+  @media(max-width:900px){.two{grid-template-columns:1fr}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .panel h3{margin:0;padding:14px 16px;font-size:14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .panel h3 .see{margin-left:auto;font-size:12px;font-weight:400;color:var(--navy2);cursor:pointer}
+  .panel .body{padding:6px 0}
+
+  /* Toolbar / chips */
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:var(--panel);color:var(--mut);padding:6px 13px;border-radius:20px;font-size:13px;cursor:pointer}
+  .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .btn{background:var(--navy);color:#fff;border:none;padding:9px 15px;border-radius:9px;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{background:var(--navy2)}
+  .btn.sec{background:var(--panel);color:var(--navy);border:1px solid var(--navy)}
+  .btn.ghost{background:none;color:var(--navy2);border:none;padding:6px 8px}
+  .mini{font-size:12px;padding:5px 9px;border-radius:7px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
+  .mini:hover{background:var(--soft)}
+
+  /* Table */
+  .tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{background:var(--soft);color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--soft)}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;white-space:nowrap}
+  .tag.si{background:var(--okbg);color:var(--ok)} .tag.no{background:#f0f2f6;color:var(--mut)}
+  .tag.arch{background:#eceff3;color:#6b7a90} .tag.act{background:var(--infobg);color:var(--info)}
+  .tag.pend{background:var(--warnbg);color:var(--warn)} .tag.env{background:var(--okbg);color:var(--ok)}
+  .radbtn{font-family:ui-monospace,monospace;font-weight:600;color:var(--navy)}
+  .sub{color:var(--mut);font-size:12px;margin-top:2px}
+
+  .empty{padding:44px 20px;text-align:center;color:var(--mut)}
+  .empty .big{font-size:34px;margin-bottom:8px;opacity:.5}
+
+  /* Slide-over detail */
+  .overlay{position:fixed;inset:0;background:rgba(20,30,50,.35);opacity:0;pointer-events:none;transition:.2s;z-index:20}
+  .overlay.show{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100vh;width:440px;max-width:94vw;background:var(--panel);box-shadow:-8px 0 30px rgba(0,0,0,.15);
+    transform:translateX(100%);transition:.25s;z-index:21;display:flex;flex-direction:column}
+  .drawer.show{transform:none}
+  .drawer .dh{background:var(--navy);color:#fff;padding:18px 20px}
+  .drawer .dh .r{font-family:ui-monospace,monospace;font-size:16px;font-weight:700}
+  .drawer .dh .c{color:#bcd; font-size:13px;margin-top:3px}
+  .drawer .db{padding:18px 20px;overflow:auto;flex:1}
+  .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13.5px;margin-bottom:16px}
+  .kv .k{color:var(--mut)}
+  .drawer .df{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+  .close{float:right;background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px}
+  .note{background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:12px;font-size:13px;line-height:1.5;color:#3a4658}
+
+  /* Plantillas */
+  .tpl{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+  .tpl .th{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .tpl .th b{font-size:14.5px}
+  .tpl .cuerpo{background:var(--soft);border:1px dashed var(--line);border-radius:9px;padding:12px;font-size:13.5px;line-height:1.55;color:#38445a}
+  .var{background:#fff3d6;color:#8a6d1b;padding:1px 5px;border-radius:5px;font-weight:600;font-size:12px}
+
+  /* Dialog */
+  dialog{border:none;border-radius:14px;padding:0;width:480px;max-width:94vw;box-shadow:0 12px 50px rgba(0,0,0,.25)}
+  dialog::backdrop{background:rgba(20,30,50,.4)}
+  .dlg-h{background:var(--navy);color:#fff;padding:16px 20px;font-size:16px;font-weight:600}
+  .dlg-b{padding:18px 20px;display:grid;gap:12px}
+  .dlg-b label{font-size:12px;color:var(--mut);display:block;margin-bottom:4px;font-weight:600}
+  .dlg-b input,.dlg-b select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .dlg-f{padding:14px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--line)}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--navy);color:#fff;
+    padding:11px 20px;border-radius:24px;font-size:13.5px;opacity:0;transition:.25s;z-index:40;box-shadow:var(--shadow)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hide{display:none!important}
+  /* Mobile */
+  @media(max-width:760px){
+    .app{grid-template-columns:1fr}
+    aside{position:fixed;left:0;top:0;z-index:30;transform:translateX(-100%);transition:.25s;width:230px}
+    aside.show{transform:none}
+    .menu-btn{display:inline-flex!important}
+    .search input{width:150px}
+  }
+  .menu-btn{display:none;background:none;border:none;font-size:20px;cursor:pointer;color:var(--navy)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="aside">
+    <div class="brand">
+      <div class="logo">⚖️</div>
+      <div><b>Rastreo Judicial</b><span>Panel de control</span></div>
+    </div>
+    <nav id="nav">
+      <button data-t="inicio" class="act"><span class="ico">🏠</span> Inicio</button>
+      <button data-t="procesos"><span class="ico">📁</span> Procesos <span class="badge" id="b-proc">·</span></button>
+      <button data-t="cambios"><span class="ico">🔔</span> Cambios <span class="badge" id="b-camb">·</span></button>
+      <button data-t="notificaciones"><span class="ico">📤</span> Notificaciones</button>
+      <button data-t="vencimientos"><span class="ico">📅</span> Vencimientos <span class="badge" id="b-venc">·</span></button>
+      <button data-t="plantillas"><span class="ico">📝</span> Plantillas</button>
+    </nav>
+    <div class="side-foot">Sistema de rastreo · Rama Judicial de Colombia</div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <button class="menu-btn" onclick="document.getElementById('aside').classList.toggle('show')">☰</button>
+      <h2 id="titulo">Inicio</h2>
+      <div class="search"><span class="mag">🔎</span><input id="gsearch" type="search" placeholder="Buscar radicado o cliente…"></div>
+      <span class="modo demo" id="modo">…</span>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<!-- Drawer detalle -->
+<div class="overlay" id="ov" onclick="cerrarDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="dh">
+    <button class="close" onclick="cerrarDrawer()">✕</button>
+    <div class="r" id="d-rad"></div><div class="c" id="d-cli"></div>
+  </div>
+  <div class="db" id="d-body"></div>
+  <div class="df" id="d-foot"></div>
+</div>
+
+<!-- Dialog CRUD -->
+<dialog id="dlg">
+  <div class="dlg-h" id="dlgTitle">Proceso</div>
+  <div class="dlg-b">
+    <div><label>Radicado (23 dígitos)</label><input id="f_radicado" placeholder="25000234200020180182301"></div>
+    <div><label>Cliente</label><input id="f_cliente"></div>
+    <div><label>Demandado / Entidad</label><input id="f_demandado"></div>
+    <div><label>Despacho</label><input id="f_despacho"></div>
+    <div class="row2">
+      <div><label>Sede</label><select id="f_sede"><option>generales</option><option>zipa</option><option>fusagasuga</option><option>alianza</option><option>archivados</option></select></div>
+      <div><label>Estado</label><select id="f_estado"><option>activo</option><option>archivado</option></select></div>
+    </div>
+  </div>
+  <div class="dlg-f">
+    <button class="btn sec" onclick="dlg.close()">Cancelar</button>
+    <button class="btn" id="dlgSave">Guardar</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const content=$('#content'); let MODO='demo', PROCS=[], filtro='todos', busq='';
+const RAMA='https://consultaprocesos.ramajudicial.gov.co/Procesos/NumeroRadicacion';
+
+const api=async(p,o)=>{const r=await fetch('/api'+p,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json();};
+const esc=s=>(s??'').toString().replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const fdate=s=>{if(!s)return'';const d=s.slice(0,10).split('-');return d.length===3?`${d[2]}/${d[1]}/${d[0]}`:s;};
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);};
+const copiar=async(txt)=>{try{await navigator.clipboard.writeText(txt);toast('Copiado ✓');}catch{toast('No se pudo copiar');}};
+const resaltarVars=t=>esc(t).replace(/\{\{(\w+)\}\}/g,'<span class="var">{{$1}}</span>');
+const empty=(ico,titulo,sub)=>`<div class="empty"><div class="big">${ico}</div><b>${esc(titulo)}</b>${sub?`<div class="sub" style="margin-top:6px">${esc(sub)}</div>`:''}</div>`;
+const emptyMini=(ico,titulo,sub)=>`<div class="empty" style="padding:26px 16px"><div class="big" style="font-size:26px">${ico}</div><b>${esc(titulo)}</b>${sub?`<div class="sub" style="margin-top:4px">${esc(sub)}</div>`:''}</div>`;
+const tablaMini=filas=>`<table>${filas.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+
+let STATS={};
+async function cargarStats(){
+  STATS=await api('/stats'); MODO=STATS.modo;
+  const m=$('#modo'); m.className='modo '+(MODO==='real'?'real':'demo');
+  m.textContent=MODO==='real'?'● Modo real · edición activa':'● Modo demostración';
+  $('#b-proc').textContent=STATS.procesos; $('#b-venc').textContent=STATS.audiencias;
+  $('#b-camb').textContent=STATS.alertasPendientes;
+}
+
+const vistas={
+  async inicio(){
+    const s=STATS;
+    const cards=[
+      ['📁','Procesos totales',s.procesos,'var(--navy)'],
+      ['📡','Rastreables por API',s.rastreables,'var(--ok)'],
+      ['✅','Activos',s.activos,'var(--info)'],
+      ['🗄️','Archivados',s.archivados,'var(--mut)'],
+      ['🔔','Alertas pendientes',s.alertasPendientes,'var(--warn)'],
+      ['📅','Audiencias',s.audiencias,'var(--accent)'],
+    ];
+    content.innerHTML=`
+      <div class="grid stats">${cards.map(([i,l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${i} ${l}</div></div>`).join('')}</div>
+      <div class="grid two">
+        <div class="panel"><h3>🔔 Últimos cambios <span class="see" onclick="ir('cambios')">Ver todos →</span></h3><div class="body" id="ini-camb"></div></div>
+        <div class="panel"><h3>📅 Próximos vencimientos <span class="see" onclick="ir('vencimientos')">Ver todos →</span></h3><div class="body" id="ini-venc"></div></div>
+      </div>`;
+    const camb=await api('/cambios');
+    $('#ini-camb').innerHTML=camb.length?tablaMini(camb.slice(0,6).map(a=>[fdate(a.creado_en),`<b class="radbtn">${esc(a.radicado||'')}</b>`,esc(a.titulo||'')]))
+      : emptyMini('🔕','Aún no hay cambios detectados','El motor los creará al detectar actuaciones nuevas.');
+    const venc=await api('/vencimientos'); const hoy=new Date().toISOString().slice(0,10);
+    const prox=venc.filter(v=>v.fecha>=hoy).slice(0,6); const usar=prox.length?prox:venc.slice(-6);
+    $('#ini-venc').innerHTML=usar.length?tablaMini(usar.map(a=>[`<b>${fdate(a.fecha)}</b>`,esc(a.cliente||a.descripcion||''),`<span class="sub">${esc(a.hora||'')}</span>`]))
+      : emptyMini('📭','Sin audiencias próximas','');
+  },
+
+  async procesos(){
+    const chips=[['todos','Todos'],['activo','Activos'],['archivado','Archivados'],['api','Rastreables API']];
+    content.innerHTML=`
+      ${MODO==='demo'?'<div class="note" style="margin-bottom:14px">📌 <b>Modo demostración</b>: se ven tus procesos migrados (solo lectura). Al conectar Supabase se habilita crear, editar y eliminar.</div>':''}
+      <div class="toolbar">
+        <div class="chips">${chips.map(([k,l])=>`<button class="chip ${filtro===k?'on':''}" onclick="setFiltro('${k}')">${l}</button>`).join('')}</div>
+        <div style="margin-left:auto">${MODO==='real'?'<button class="btn" onclick="abrirNuevo()">＋ Nuevo proceso</button>':''}</div>
+      </div>
+      <div id="tabla"></div>`;
+    pintarProcesos();
+  },
+
+  async cambios(){
+    const rows=await api('/cambios');
+    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Radicado</th><th>Cliente</th><th>Novedad</th><th>Estado</th></tr></thead><tbody>${rows.map(a=>`<tr onclick="verPorRad('${esc(a.radicado||'')}')">
+      <td>${fdate(a.creado_en)}</td><td class="radbtn">${esc(a.radicado||'')}</td><td>${esc(a.cliente||'')}</td>
+      <td>${esc(a.titulo||'')}<div class="sub">${esc((a.detalle||'').slice(0,80))}</div></td>
+      <td><span class="tag ${a.estado==='pendiente'?'pend':'env'}">${esc(a.estado)}</span></td></tr>`).join('')}</tbody></table></div>`
+      : empty('🔕','Sin cambios por ahora','Cuando el motor de rastreo detecte una actuación nueva, aparecerá aquí y se enviará la alerta.');
+  },
+
+  async notificaciones(){
+    const rows=await api('/notificaciones');
+    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Enviada</th><th>Radicado</th><th>Canal</th><th>Destino</th><th>Estado</th></tr></thead><tbody>${rows.map(n=>`<tr>
+      <td>${fdate(n.enviada_en)}</td><td class="radbtn">${esc(n.radicado||'')}</td><td>${n.canal==='email'?'✉️':'💬'} ${esc(n.canal)}</td>
+      <td>${esc(n.destinatario_tipo)} <span class="sub">${esc(n.destinatario_valor||'')}</span></td>
+      <td><span class="tag ${n.estado==='enviada'?'env':(n.estado==='fallida'?'pend':'act')}">${esc(n.estado)}</span></td></tr>`).join('')}</tbody></table></div>`
+      : empty('📤','Sin notificaciones enviadas','Las alertas enviadas al buzón central y a los abogados se listarán aquí.');
+  },
+
+  async vencimientos(){
+    const rows=await api('/vencimientos'); const hoy=new Date().toISOString().slice(0,10);
+    const color=f=>{if(!f)return['',''];const dd=Math.round((new Date(f)-new Date(hoy))/864e5);
+      if(dd<0)return['arch','vencida'];if(dd<=3)return['pend',dd===0?'hoy':`en ${dd} día(s)`];if(dd<=15)return['act',`en ${dd} días`];return['si',`en ${dd} días`];};
+    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Cuándo</th><th>Descripción</th><th>Cliente</th><th>Lugar</th></tr></thead><tbody>${rows.map(a=>{const[c,l]=color(a.fecha);return`<tr>
+      <td><b>${fdate(a.fecha)}</b><div class="sub">${esc(a.hora||'')}</div></td><td><span class="tag ${c}">${l}</span></td>
+      <td>${esc(a.descripcion||'')}</td><td>${esc(a.cliente||'')}</td><td>${esc(a.lugar||'')}</td></tr>`;}).join('')}</tbody></table></div>`
+      : empty('📅','Sin audiencias registradas','');
+  },
+
+  async plantillas(){
+    const rows=await api('/plantillas');
+    content.innerHTML=`<div class="note" style="margin-bottom:14px">📝 Plantillas de respuesta. Usa las variables <span class="var">{{radicado}}</span> <span class="var">{{cliente}}</span> <span class="var">{{actuacion}}</span> <span class="var">{{fecha}}</span> — se reemplazan al usarlas.</div>`+
+      (rows.length?rows.map(t=>`<div class="tpl">
+        <div class="th"><b>${esc(t.nombre)}</b> <span class="tag act">${t.canal==='whatsapp'?'💬 WhatsApp':(t.canal==='email'?'✉️ Correo':'General')}</span>
+        <button class="mini" style="margin-left:auto" onclick='copiar(${JSON.stringify(t.cuerpo)})'>📋 Copiar</button></div>
+        <div class="cuerpo">${resaltarVars(t.cuerpo)}</div></div>`).join('')
+      : empty('📝','Sin plantillas','')); }
+};
+
+// ---- Procesos: filtro + tabla + detalle ----
+function procesosFiltrados(){
+  let r=PROCS;
+  if(filtro==='activo')r=r.filter(p=>p.estado==='activo');
+  else if(filtro==='archivado')r=r.filter(p=>p.estado==='archivado');
+  else if(filtro==='api')r=r.filter(p=>p.api_trackable);
+  return r;
+}
+async function pintarProcesos(){
+  PROCS=await api('/procesos?q='+encodeURIComponent(busq));
+  const r=procesosFiltrados();
+  $('#tabla').innerHTML=r.length?`<div class="tablewrap"><table><thead><tr>
+    <th>Radicado / ID</th><th>Cliente</th><th>Despacho</th><th>Rastreo</th><th>Estado</th><th>Última actuación</th>${MODO==='real'?'<th></th>':''}</tr></thead>
+    <tbody>${r.map((p,i)=>`<tr onclick="verDetalle(${i})">
+      <td><span class="radbtn">${esc(p.radicado||p.origen_id_raw||'—')}</span><div class="sub">${esc(p.sede||'')}</div></td>
+      <td>${esc(p.cliente||'')}</td>
+      <td>${esc((p.despacho||p.juzgado||'').slice(0,38))}</td>
+      <td>${p.api_trackable?'<span class="tag si">📡 API</span>':'<span class="tag no">'+esc(p.tipo_id||'—')+'</span>'}</td>
+      <td><span class="tag ${p.estado==='archivado'?'arch':'act'}">${esc(p.estado||'')}</span></td>
+      <td>${fdate(p.fecha_ultima_actuacion)}<div class="sub">${esc((p.ultima_actuacion_texto||'').slice(0,42))}</div></td>
+      ${MODO==='real'?`<td onclick="event.stopPropagation()" style="white-space:nowrap"><button class="mini" onclick='editar(${i})'>✏️</button> <button class="mini" onclick="borrar('${p.id}')">🗑️</button></td>`:''}
+    </tr>`).join('')}</tbody></table></div>
+    <div class="sub" style="padding:10px 4px">${r.length} proceso(s)</div>`
+    : empty('🔍','Sin resultados','Prueba con otro filtro o término de búsqueda.');
+}
+window.setFiltro=k=>{filtro=k;vistas.procesos();};
+
+// ---- Drawer detalle ----
+window.verDetalle=i=>{const p=procesosFiltrados()[i];abrirDrawer(p);};
+window.verPorRad=async rad=>{if(!rad)return;const r=await api('/procesos?q='+encodeURIComponent(rad));if(r[0])abrirDrawer(r[0]);};
+function abrirDrawer(p){
+  $('#d-rad').textContent=p.radicado||p.origen_id_raw||'—';
+  $('#d-cli').textContent=p.cliente||'';
+  $('#d-body').innerHTML=`
+    <div class="kv">
+      <div class="k">Tipo de ID</div><div>${esc(p.tipo_id||'—')} ${p.api_trackable?'<span class="tag si">rastreable</span>':''}</div>
+      <div class="k">Sede</div><div>${esc(p.sede||'—')}</div>
+      <div class="k">Estado</div><div><span class="tag ${p.estado==='archivado'?'arch':'act'}">${esc(p.estado||'')}</span></div>
+      <div class="k">Despacho</div><div>${esc(p.despacho||p.juzgado||'—')}</div>
+      <div class="k">Demandado</div><div>${esc(p.demandado||'—')}</div>
+      <div class="k">Últ. actuación</div><div>${fdate(p.fecha_ultima_actuacion)||'—'}</div>
+    </div>
+    ${p.ultima_actuacion_texto?`<div class="note">${esc(p.ultima_actuacion_texto)}</div>`:''}`;
+  const foot=$('#d-foot');foot.innerHTML='';
+  if(p.radicado){
+    const b1=document.createElement('button');b1.className='btn sec';b1.innerHTML='📋 Copiar radicado';b1.onclick=()=>copiar(p.radicado);
+    const b2=document.createElement('a');b2.className='btn';b2.href=RAMA;b2.target='_blank';b2.innerHTML='🔗 Consultar en Rama Judicial';
+    foot.append(b1,b2);
+  }
+  if(MODO==='real'){const be=document.createElement('button');be.className='btn ghost';be.textContent='Editar';be.onclick=()=>{cerrarDrawer();const idx=PROCS.indexOf(p);editar(idx);};foot.append(be);}
+  $('#ov').classList.add('show');$('#drawer').classList.add('show');
+}
+window.cerrarDrawer=()=>{$('#ov').classList.remove('show');$('#drawer').classList.remove('show');};
+
+// ---- CRUD ----
+const dlg=$('#dlg');let editId=null;
+window.abrirNuevo=()=>{editId=null;$('#dlgTitle').textContent='Nuevo proceso';['radicado','cliente','demandado','despacho'].forEach(k=>$('#f_'+k).value='');dlg.showModal();};
+window.editar=i=>{const p=PROCS[i]||procesosFiltrados()[i];editId=p.id;$('#dlgTitle').textContent='Editar proceso';
+  $('#f_radicado').value=p.radicado||'';$('#f_cliente').value=p.cliente||'';$('#f_demandado').value=p.demandado||'';$('#f_despacho').value=p.despacho||'';
+  $('#f_sede').value=p.sede||'generales';$('#f_estado').value=p.estado||'activo';dlg.showModal();};
+window.borrar=async id=>{if(!confirm('¿Eliminar este proceso?'))return;await api('/procesos/'+id,{method:'DELETE'});toast('Proceso eliminado');pintarProcesos();cargarStats();};
+$('#dlgSave').onclick=async()=>{const rad=$('#f_radicado').value.trim();
+  const body={radicado:rad||null,demandado:$('#f_demandado').value.trim()||null,despacho:$('#f_despacho').value.trim()||null,
+    sede:$('#f_sede').value,estado:$('#f_estado').value,tipo_id:/^\d{23}$/.test(rad)?'radicado_23':'otro',api_trackable:/^\d{23}$/.test(rad)};
+  try{if(editId)await api('/procesos/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    else await api('/procesos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    dlg.close();toast('Guardado ✓');pintarProcesos();cargarStats();}catch(e){alert('Error: '+e.message);}};
+
+// ---- Navegación ----
+const titulos={inicio:'Inicio',procesos:'Procesos',cambios:'Cambios y alertas',notificaciones:'Notificaciones',vencimientos:'Vencimientos',plantillas:'Plantillas'};
+window.ir=t=>{$$('#nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===t));$('#titulo').textContent=titulos[t];$('#aside').classList.remove('show');vistas[t]();};
+$('#nav').onclick=e=>{const b=e.target.closest('button');if(b)ir(b.dataset.t);};
+$('#gsearch').oninput=e=>{busq=e.target.value;clearTimeout(window._t);window._t=setTimeout(()=>{
+  if($('#titulo').textContent!=='Procesos'){ir('procesos');}else pintarProcesos();},280);};
+
+(async()=>{await cargarStats();vistas.inicio();})();
+</script>
+</body>
+</html>

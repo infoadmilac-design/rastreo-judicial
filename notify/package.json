@@ -1,0 +1,14 @@
+{
+  "name": "rastreo-judicial-notify",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Envío de alertas por correo (Resend) y WhatsApp",
+  "scripts": {
+    "dry-run": "node notificar.mjs --dry-run",
+    "notificar": "node notificar.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "engines": { "node": ">=18" }
+}

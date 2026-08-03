@@ -1,0 +1,7 @@
+node_modules/
+.env
+**/.env
+worker/.estado-dryrun.json
+migration/output/
+notify/output/
+worker/output/

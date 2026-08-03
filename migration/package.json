@@ -1,0 +1,12 @@
+{
+  "name": "rastreo-judicial-migracion",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Migración del Google Sheet de seguimiento a la base de datos normalizada",
+  "scripts": {
+    "scrape": "node scrape.mjs",
+    "normalize": "node normalize.mjs",
+    "migrar": "node scrape.mjs && node normalize.mjs"
+  },
+  "engines": { "node": ">=18" }
+}

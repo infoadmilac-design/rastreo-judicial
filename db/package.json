@@ -1,0 +1,9 @@
+{
+  "name": "rastreo-judicial-db",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Carga del esquema y la semilla en Supabase/Postgres",
+  "scripts": { "load": "node load.mjs" },
+  "dependencies": { "pg": "^8.11.0" },
+  "engines": { "node": ">=18" }
+}

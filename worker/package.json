@@ -1,0 +1,14 @@
+{
+  "name": "rastreo-judicial-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Motor de rastreo de procesos contra el API oficial CPNU",
+  "scripts": {
+    "dry-run": "node rastrear.mjs --dry-run",
+    "rastrear": "node rastrear.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  },
+  "engines": { "node": ">=18" }
+}
