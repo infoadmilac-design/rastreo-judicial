@@ -208,6 +208,14 @@ const RAMA='https://consultaprocesos.ramajudicial.gov.co/Procesos/NumeroRadicaci
 const api=async(p,o)=>{const r=await fetch('/api'+p,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json();};
 const esc=s=>(s??'').toString().replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const fdate=s=>{if(!s)return'';const d=s.slice(0,10).split('-');return d.length===3?`${d[2]}/${d[1]}/${d[0]}`:s;};
+const fdatetime=s=>{if(!s)return'';const d=new Date(s);if(isNaN(d))return'';
+  const dd=String(d.getDate()).padStart(2,'0'),mm=String(d.getMonth()+1).padStart(2,'0'),yy=d.getFullYear();
+  const hh=String(d.getHours()).padStart(2,'0'),mi=String(d.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;};
+const haceTiempo=s=>{if(!s)return'';const min=Math.round((Date.now()-new Date(s))/60000);
+  if(min<1)return'hace un momento';if(min<60)return`hace ${min} min`;
+  const hr=Math.round(min/60);if(hr<24)return`hace ${hr} h`;
+  return`hace ${Math.round(hr/24)} d`;};
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);};
 const copiar=async(txt)=>{try{await navigator.clipboard.writeText(txt);toast('Copiado ✓');}catch{toast('No se pudo copiar');}};
 const resaltarVars=t=>esc(t).replace(/\{\{(\w+)\}\}/g,'<span class="var">{{$1}}</span>');
@@ -235,8 +243,20 @@ const vistas={
       ['🔔','Alertas pendientes',s.alertasPendientes,'var(--warn)'],
       ['📅','Audiencias',s.audiencias,'var(--accent)'],
     ];
+    const revisados=s.revisados??0, rastr=s.rastreables||0;
+    const pct=rastr?Math.round(revisados/rastr*100):0;
+    const bannerRevision=MODO==='real'?`
+      <div class="note" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:18px">🕓</span>
+        <div>
+          <b>Última revisión:</b> ${s.ultimaRevision?`${fdatetime(s.ultimaRevision)} <span class="sub">(${haceTiempo(s.ultimaRevision)})</span>`:'aún no se ha corrido ninguna'}
+          &nbsp;·&nbsp; <b>${revisados}/${rastr}</b> procesos rastreables ya revisados (${pct}%)
+        </div>
+        <span class="see" style="margin-left:auto" onclick="ir('procesos')">Ver detalle por proceso →</span>
+      </div>`:'';
     content.innerHTML=`
       <div class="grid stats">${cards.map(([i,l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${i} ${l}</div></div>`).join('')}</div>
+      ${bannerRevision}
       <div class="grid two">
         <div class="panel"><h3>🔔 Últimos cambios <span class="see" onclick="ir('cambios')">Ver todos →</span></h3><div class="body" id="ini-camb"></div></div>
         <div class="panel"><h3>📅 Próximos vencimientos <span class="see" onclick="ir('vencimientos')">Ver todos →</span></h3><div class="body" id="ini-venc"></div></div>
@@ -251,7 +271,7 @@ const vistas={
   },
 
   async procesos(){
-    const chips=[['todos','Todos'],['activo','Activos'],['archivado','Archivados'],['api','Rastreables API']];
+    const chips=[['todos','Todos'],['activo','Activos'],['archivado','Archivados'],['api','Rastreables API'],['revisados','Revisados'],['sinrevisar','Sin revisar']];
     content.innerHTML=`
       ${MODO==='demo'?'<div class="note" style="margin-bottom:14px">📌 <b>Modo demostración</b>: se ven tus procesos migrados (solo lectura). Al conectar Supabase se habilita crear, editar y eliminar.</div>':''}
       <div class="toolbar">
@@ -404,13 +424,15 @@ function procesosFiltrados(){
   if(filtro==='activo')r=r.filter(p=>p.estado==='activo');
   else if(filtro==='archivado')r=r.filter(p=>p.estado==='archivado');
   else if(filtro==='api')r=r.filter(p=>p.api_trackable);
+  else if(filtro==='sinrevisar')r=r.filter(p=>p.api_trackable&&!p.ultimo_check_en);
+  else if(filtro==='revisados')r=r.filter(p=>!!p.ultimo_check_en);
   return r;
 }
 async function pintarProcesos(){
   PROCS=await api('/procesos?q='+encodeURIComponent(busq));
   const r=procesosFiltrados();
   $('#tabla').innerHTML=r.length?`<div class="tablewrap"><table><thead><tr>
-    <th>Radicado / ID</th><th>Cliente</th><th>Despacho</th><th>Rastreo</th><th>Estado</th><th>Última actuación</th>${MODO==='real'?'<th></th>':''}</tr></thead>
+    <th>Radicado / ID</th><th>Cliente</th><th>Despacho</th><th>Rastreo</th><th>Estado</th><th>Última actuación</th><th>Última revisión</th>${MODO==='real'?'<th></th>':''}</tr></thead>
     <tbody>${r.map((p,i)=>`<tr onclick="verDetalle(${i})">
       <td><span class="radbtn">${esc(p.radicado||p.origen_id_raw||'—')}</span><div class="sub">${esc(p.sede||'')}</div></td>
       <td>${esc(p.cliente||'')}</td>
@@ -418,6 +440,7 @@ async function pintarProcesos(){
       <td>${p.api_trackable?'<span class="tag si">📡 API</span>':'<span class="tag no">'+esc(p.tipo_id||'—')+'</span>'}</td>
       <td><span class="tag ${p.estado==='archivado'?'arch':'act'}">${esc(p.estado||'')}</span></td>
       <td>${fdate(p.fecha_ultima_actuacion)}<div class="sub">${esc((p.ultima_actuacion_texto||'').slice(0,42))}</div></td>
+      <td>${p.ultimo_check_en?`${fdatetime(p.ultimo_check_en)}<div class="sub">${haceTiempo(p.ultimo_check_en)}</div>`:(p.api_trackable?'<span class="tag no">Sin revisar</span>':'<span class="sub">—</span>')}</td>
       ${MODO==='real'?`<td onclick="event.stopPropagation()" style="white-space:nowrap"><button class="mini" onclick='editar(${i})'>✏️</button> <button class="mini" onclick="borrar('${p.id}')">🗑️</button></td>`:''}
     </tr>`).join('')}</tbody></table></div>
     <div class="sub" style="padding:10px 4px">${r.length} proceso(s)</div>`
@@ -439,6 +462,7 @@ function abrirDrawer(p){
       <div class="k">Despacho</div><div>${esc(p.despacho||p.juzgado||'—')}</div>
       <div class="k">Demandado</div><div>${esc(p.demandado||'—')}</div>
       <div class="k">Últ. actuación</div><div>${fdate(p.fecha_ultima_actuacion)||'—'}</div>
+      <div class="k">Últ. revisión</div><div>${p.ultimo_check_en?`${fdatetime(p.ultimo_check_en)} <span class="sub">(${haceTiempo(p.ultimo_check_en)})</span>`:(p.api_trackable?'<span class="tag no">Sin revisar aún</span>':'—')}</div>
     </div>
     ${p.ultima_actuacion_texto?`<div class="note">${esc(p.ultima_actuacion_texto)}</div>`:''}`;
   const foot=$('#d-foot');foot.innerHTML='';

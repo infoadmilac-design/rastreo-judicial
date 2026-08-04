@@ -61,10 +61,15 @@ const data = {
       };
     }
     const one = async (t, f) => (await db.from(t).select('*', { count: 'exact', head: true }).match(f || {})).count || 0;
+    const rastreables = (await db.from('procesos').select('*', { count: 'exact', head: true }).eq('api_trackable', true)).count || 0;
+    const revisados = (await db.from('procesos').select('*', { count: 'exact', head: true }).eq('api_trackable', true).not('ultimo_check_en', 'is', null)).count || 0;
+    const { data: ult } = await db.from('procesos').select('ultimo_check_en').not('ultimo_check_en', 'is', null).order('ultimo_check_en', { ascending: false }).limit(1).maybeSingle();
     return {
       modo: 'real',
       procesos: await one('procesos'),
-      rastreables: (await db.from('procesos').select('*', { count: 'exact', head: true }).eq('api_trackable', true)).count || 0,
+      rastreables,
+      revisados,
+      ultimaRevision: ult?.ultimo_check_en || null,
       activos: (await db.from('procesos').select('*', { count: 'exact', head: true }).eq('estado', 'activo')).count || 0,
       archivados: (await db.from('procesos').select('*', { count: 'exact', head: true }).eq('estado', 'archivado')).count || 0,
       alertasPendientes: (await db.from('alertas').select('*', { count: 'exact', head: true }).eq('estado', 'pendiente')).count || 0,
@@ -80,7 +85,7 @@ const data = {
         !s || (p.radicado || '').includes(s) || (p.cliente || '').toLowerCase().includes(s) ||
         (p.origen_id_raw || '').toLowerCase().includes(s)).slice(0, 500);
     }
-    let query = db.from('procesos').select('id, radicado, origen_id_raw, tipo_id, api_trackable, estado, sede, demandado, despacho, fecha_ultima_actuacion, ultima_actuacion_texto, clientes(nombre), abogados(nombre)').limit(500);
+    let query = db.from('procesos').select('id, radicado, origen_id_raw, tipo_id, api_trackable, estado, sede, demandado, despacho, fecha_ultima_actuacion, ultima_actuacion_texto, ultimo_check_en, clientes(nombre), abogados(nombre)').limit(500);
     if (q) {
       // Buscar también por nombre de cliente (no solo radicado/ID), uniendo por cliente_id
       const { data: clientesMatch } = await db.from('clientes').select('id').ilike('nombre', `%${q}%`).limit(200);
