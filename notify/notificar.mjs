@@ -1,17 +1,19 @@
 // =====================================================================
-//  notificar.mjs  ·  Fase 3 (correo)
-//  Toma las alertas 'pendiente' y envía un correo al buzón central.
-//  Marca la notificación y la alerta como enviadas. Idempotente.
+//  notificar.mjs  ·  Fase 3 (correo + WhatsApp)
+//  Toma las alertas 'pendiente' y las envía por correo (Resend) y/o
+//  WhatsApp (Meta Cloud API) al buzón/número central. Cada canal es
+//  independiente: si uno falla, el otro igual se intenta. Idempotente.
 //
 //  Modos:
 //    node notificar.mjs --dry-run   → no envía; genera un HTML de muestra y lo imprime
-//    node notificar.mjs             → contra Supabase + Resend (usa .env)
+//    node notificar.mjs             → contra Supabase + Resend + WhatsApp (usa .env)
 // =====================================================================
 import { writeFile, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { renderAlertaEmail } from './plantillas.mjs';
 import { enviarEmail } from './resend.mjs';
+import { enviarPlantilla } from './whatsapp.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DRY = process.argv.includes('--dry-run');
@@ -42,44 +44,78 @@ async function correrDryRun() {
 async function correrProduccion() {
   const { createClient } = await import('@supabase/supabase-js');
   const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_KEY;
-  const central = process.env.EMAIL_CENTRAL;
+  const emailCentral = process.env.EMAIL_CENTRAL;
+  const waCentral = process.env.WHATSAPP_CENTRAL;
   if (!url || !key) { console.error('Falta SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
-  if (!central) { console.error('Falta EMAIL_CENTRAL (buzón que recibe las alertas)'); process.exit(1); }
+  if (!emailCentral && !waCentral) { console.error('Falta EMAIL_CENTRAL y/o WHATSAPP_CENTRAL (a dónde llegan las alertas)'); process.exit(1); }
   const db = createClient(url, key, { auth: { persistSession: false } });
 
-  // Alertas pendientes con su contexto
+  // Alertas pendientes con su contexto. Tope de seguridad: si por algún bug o
+  // corrida duplicada aparecen cientos de alertas de golpe, no se manda un
+  // bombardeo de WhatsApp/correo — se manda un aviso de que hay que revisar
+  // a mano en vez de saturar al número central (ver LIMITE_SEGURIDAD abajo).
+  const LIMITE_SEGURIDAD = 30;
   const { data: alertas, error } = await db
     .from('alertas')
     .select('id, tipo, detalle, proceso_id, actuacion_id, procesos(radicado, despacho, clientes(nombre)), actuaciones(fecha_actuacion, tipo, anotacion)')
-    .eq('estado', 'pendiente').limit(200);
+    .eq('estado', 'pendiente').order('creado_en', { ascending: true }).limit(LIMITE_SEGURIDAD + 1);
   if (error) throw error;
   if (!alertas.length) { console.log('No hay alertas pendientes.'); return; }
+  if (alertas.length > LIMITE_SEGURIDAD) {
+    console.error(`⚠️  Hay más de ${LIMITE_SEGURIDAD} alertas pendientes de golpe (posible corrida duplicada u otro problema). ` +
+      `No se envía nada por WhatsApp/correo para evitar un bombardeo — revisa la tabla "alertas" en Supabase antes de continuar.`);
+    process.exit(1);
+  }
 
-  console.log(`Enviando ${alertas.length} alerta(s) al buzón central ${central}…`);
+  console.log(`Enviando ${alertas.length} alerta(s)…`);
   let enviadas = 0, fallidas = 0;
   for (const al of alertas) {
     const p = al.procesos || {};
     const act = al.actuaciones ? [al.actuaciones] : [];
-    const { subject, html, text } = renderAlertaEmail({
-      radicado: p.radicado, cliente: p.clientes?.nombre, despacho: p.despacho,
-      actuaciones: act.map(a => ({ fechaActuacion: a.fecha_actuacion, tipo: a.tipo, anotacion: a.anotacion })),
-    });
-    // Registrar intento
-    const { data: notif } = await db.from('notificaciones').insert({
-      alerta_id: al.id, canal: 'email', destinatario_tipo: 'centro',
-      destinatario_valor: central, cuerpo: text, estado: 'pendiente',
-    }).select('id').single();
+    const primera = act[0] || {};
+    let algunaOk = false;
 
-    try {
-      const msgId = await enviarEmail({ to: central, subject, html, text });
-      await db.from('notificaciones').update({ estado: 'enviada', proveedor_msg_id: msgId, enviada_en: new Date().toISOString() }).eq('id', notif.id);
-      await db.from('alertas').update({ estado: 'notificada' }).eq('id', al.id);
-      enviadas++;
-    } catch (e) {
-      await db.from('notificaciones').update({ estado: 'fallida', error: e.message }).eq('id', notif.id);
-      fallidas++;
-      console.log(`   ❌ ${p.radicado}: ${e.message}`);
+    if (emailCentral) {
+      const { subject, html, text } = renderAlertaEmail({
+        radicado: p.radicado, cliente: p.clientes?.nombre, despacho: p.despacho,
+        actuaciones: act.map(a => ({ fechaActuacion: a.fecha_actuacion, tipo: a.tipo, anotacion: a.anotacion })),
+      });
+      const { data: notif } = await db.from('notificaciones').insert({
+        alerta_id: al.id, canal: 'email', destinatario_tipo: 'centro',
+        destinatario_valor: emailCentral, cuerpo: text, estado: 'pendiente',
+      }).select('id').single();
+      try {
+        const msgId = await enviarEmail({ to: emailCentral, subject, html, text });
+        await db.from('notificaciones').update({ estado: 'enviada', proveedor_msg_id: msgId, enviada_en: new Date().toISOString() }).eq('id', notif.id);
+        algunaOk = true;
+      } catch (e) {
+        await db.from('notificaciones').update({ estado: 'fallida', error: e.message }).eq('id', notif.id);
+        console.log(`   ❌ [email] ${p.radicado}: ${e.message}`);
+      }
     }
+
+    if (waCentral) {
+      const resumen = `${primera.tipo || 'Novedad'} (${primera.fecha_actuacion || 'sin fecha'})`;
+      const cuerpo = `${p.radicado} · ${p.clientes?.nombre || 'sin cliente'} · ${resumen}`;
+      const { data: notif } = await db.from('notificaciones').insert({
+        alerta_id: al.id, canal: 'whatsapp', destinatario_tipo: 'centro',
+        destinatario_valor: waCentral, cuerpo, estado: 'pendiente',
+      }).select('id').single();
+      try {
+        const msgId = await enviarPlantilla({
+          to: waCentral,
+          params: [p.radicado || '—', p.clientes?.nombre || 'sin cliente', resumen],
+        });
+        await db.from('notificaciones').update({ estado: 'enviada', proveedor_msg_id: msgId, enviada_en: new Date().toISOString() }).eq('id', notif.id);
+        algunaOk = true;
+      } catch (e) {
+        await db.from('notificaciones').update({ estado: 'fallida', error: e.message }).eq('id', notif.id);
+        console.log(`   ❌ [whatsapp] ${p.radicado}: ${e.message}`);
+      }
+    }
+
+    if (algunaOk) { await db.from('alertas').update({ estado: 'notificada' }).eq('id', al.id); enviadas++; }
+    else fallidas++;
   }
   console.log(`\n===== RESUMEN =====\nEnviadas: ${enviadas}  Fallidas: ${fallidas}`);
 }

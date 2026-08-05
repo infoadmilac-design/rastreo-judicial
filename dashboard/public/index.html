@@ -202,7 +202,7 @@
 
 <script>
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
-const content=$('#content'); let MODO='demo', PROCS=[], filtro='todos', busq='';
+const content=$('#content'); let MODO='demo', PROCS=[], filtro='todos', busq='', orden='';
 const RAMA='https://consultaprocesos.ramajudicial.gov.co/Procesos/NumeroRadicacion';
 
 const api=async(p,o)=>{const r=await fetch('/api'+p,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json();};
@@ -216,6 +216,47 @@ const haceTiempo=s=>{if(!s)return'';const min=Math.round((Date.now()-new Date(s)
   if(min<1)return'hace un momento';if(min<60)return`hace ${min} min`;
   const hr=Math.round(min/60);if(hr<24)return`hace ${hr} h`;
   return`hace ${Math.round(hr/24)} d`;};
+const fmtDur=ms=>{const s=Math.max(0,Math.floor(ms/1000));const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
+  return h?`${h}h ${m}m`:`${m}m ${ss}s`;};
+let liveTimer=null;
+async function pintarLive(){
+  const el=document.getElementById('ini-live');
+  if(!el)return; // se salió de Inicio: no seguir sondeando
+  let r=null;
+  try{r=await api('/rastreo-actual');}catch{}
+  if(!r){el.innerHTML='';return;}
+  const total=r.total||0,proc=r.procesados||0;
+  const pct=total?Math.round(proc/total*100):0;
+  const circ=2*Math.PI*30,off=circ*(1-pct/100);
+  const corriendo=r.estado==='corriendo';
+  const desdeLatido=Date.now()-new Date(r.actualizado_en).getTime();
+  const estancado=corriendo&&desdeLatido>8*60*1000;
+  const color=(r.estado==='error'||estancado)?'var(--warn)':((r.errores||0)>0?'var(--accent)':'var(--ok)');
+  let estadoTxt,icono;
+  if(estancado){estadoTxt='Sin actividad reciente — puede haberse interrumpido';icono='⚠️';}
+  else if(r.estado==='corriendo'){estadoTxt=(r.errores||0)>0?`En curso, ${r.errores} error(es)`:'En curso, todo bien';icono=(r.errores||0)>0?'⚠️':'⏳';}
+  else if(r.estado==='completado'){estadoTxt=(r.errores||0)>0?`Completada con ${r.errores} error(es)`:'Completada sin errores';icono=(r.errores||0)>0?'⚠️':'✅';}
+  else {estadoTxt='Se interrumpió con un error';icono='❌';}
+  el.innerHTML=`
+    <div class="panel" style="margin-bottom:16px">
+      <h3>${corriendo?'⏳ Revisión en curso':'🩺 Estado de la última corrida'}</h3>
+      <div class="body" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        <svg width="72" height="72" viewBox="0 0 72 72" style="flex:none">
+          <circle cx="36" cy="36" r="30" stroke="var(--line)" stroke-width="8" fill="none"/>
+          <circle cx="36" cy="36" r="30" stroke="${color}" stroke-width="8" fill="none" stroke-linecap="round"
+            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 36 36)"
+            style="transition:stroke-dashoffset .4s"/>
+          <text x="36" y="41" text-anchor="middle" font-size="15" font-weight="700" fill="var(--txt)">${pct}%</text>
+        </svg>
+        <div style="flex:1;min-width:220px">
+          <div><b>${icono} ${estadoTxt}</b></div>
+          <div class="sub" style="margin-top:4px">${proc}/${total} procesos · ${r.con_cambios||0} con cambios${corriendo&&r.proceso_actual?` · revisando ahora: <span class="radbtn">${esc(r.proceso_actual)}</span>`:''}</div>
+          <div class="sub" style="margin-top:2px">Iniciada ${fdatetime(r.iniciado_en)} (hace ${fmtDur(Date.now()-new Date(r.iniciado_en).getTime())})</div>
+        </div>
+      </div>
+    </div>`;
+  if(corriendo){clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,5000);}
+}
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);};
 const copiar=async(txt)=>{try{await navigator.clipboard.writeText(txt);toast('Copiado ✓');}catch{toast('No se pudo copiar');}};
 const resaltarVars=t=>esc(t).replace(/\{\{(\w+)\}\}/g,'<span class="var">{{$1}}</span>');
@@ -234,6 +275,7 @@ async function cargarStats(){
 
 const vistas={
   async inicio(){
+    clearTimeout(liveTimer);
     const s=STATS;
     const cards=[
       ['📁','Procesos totales',s.procesos,'var(--navy)'],
@@ -257,6 +299,7 @@ const vistas={
     content.innerHTML=`
       <div class="grid stats">${cards.map(([i,l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${i} ${l}</div></div>`).join('')}</div>
       ${bannerRevision}
+      <div id="ini-live"></div>
       <div class="grid two">
         <div class="panel"><h3>🔔 Últimos cambios <span class="see" onclick="ir('cambios')">Ver todos →</span></h3><div class="body" id="ini-camb"></div></div>
         <div class="panel"><h3>📅 Próximos vencimientos <span class="see" onclick="ir('vencimientos')">Ver todos →</span></h3><div class="body" id="ini-venc"></div></div>
@@ -268,6 +311,7 @@ const vistas={
     const prox=venc.filter(v=>v.fecha>=hoy).slice(0,6); const usar=prox.length?prox:venc.slice(-6);
     $('#ini-venc').innerHTML=usar.length?tablaMini(usar.map(a=>[`<b>${fdate(a.fecha)}</b>`,esc(a.cliente||a.descripcion||''),`<span class="sub">${esc(a.hora||'')}</span>`]))
       : emptyMini('📭','Sin audiencias próximas','');
+    if(MODO==='real')pintarLive();
   },
 
   async procesos(){
@@ -276,7 +320,12 @@ const vistas={
       ${MODO==='demo'?'<div class="note" style="margin-bottom:14px">📌 <b>Modo demostración</b>: se ven tus procesos migrados (solo lectura). Al conectar Supabase se habilita crear, editar y eliminar.</div>':''}
       <div class="toolbar">
         <div class="chips">${chips.map(([k,l])=>`<button class="chip ${filtro===k?'on':''}" onclick="setFiltro('${k}')">${l}</button>`).join('')}</div>
-        <div style="margin-left:auto">${MODO==='real'?'<button class="btn" onclick="abrirNuevo()">＋ Nuevo proceso</button>':''}</div>
+        ${MODO==='real'?`<select onchange="setOrden(this.value)" style="margin-left:10px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--txt)">
+          <option value="" ${orden===''?'selected':''}>Sin ordenar</option>
+          <option value="recientes" ${orden==='recientes'?'selected':''}>Revisados más recientes primero</option>
+          <option value="antiguos" ${orden==='antiguos'?'selected':''}>Revisados más antiguos primero</option>
+        </select>`:''}
+        <div style="margin-left:${MODO==='real'?'10px':'auto'}">${MODO==='real'?'<button class="btn" onclick="abrirNuevo()">＋ Nuevo proceso</button>':''}</div>
       </div>
       <div id="tabla"></div>`;
     pintarProcesos();
@@ -429,7 +478,7 @@ function procesosFiltrados(){
   return r;
 }
 async function pintarProcesos(){
-  PROCS=await api('/procesos?q='+encodeURIComponent(busq));
+  PROCS=await api('/procesos?q='+encodeURIComponent(busq)+(orden?'&sort='+orden:''));
   const r=procesosFiltrados();
   $('#tabla').innerHTML=r.length?`<div class="tablewrap"><table><thead><tr>
     <th>Radicado / ID</th><th>Cliente</th><th>Despacho</th><th>Rastreo</th><th>Estado</th><th>Última actuación</th><th>Última revisión</th>${MODO==='real'?'<th></th>':''}</tr></thead>
@@ -447,6 +496,7 @@ async function pintarProcesos(){
     : empty('🔍','Sin resultados','Prueba con otro filtro o término de búsqueda.');
 }
 window.setFiltro=k=>{filtro=k;vistas.procesos();};
+window.setOrden=v=>{orden=v;pintarProcesos();};
 
 // ---- Drawer detalle ----
 window.verDetalle=i=>{const p=procesosFiltrados()[i];abrirDrawer(p);};

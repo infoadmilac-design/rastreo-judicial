@@ -128,9 +128,18 @@ async function correrSupabase() {
   if (error) throw error;
   console.log(`\n🔎 Rastreando ${procesos.length} procesos contra el API…\n`);
 
+  // Fila de progreso en vivo: la lee el dashboard para mostrar el avance de esta corrida.
+  const { data: run } = await db.from('rastreo_runs')
+    .insert({ estado: 'corriendo', total: procesos.length }).select('id').single();
+  const runId = run?.id;
+  const marcarProgreso = (extra) => runId && db.from('rastreo_runs')
+    .update({ actualizado_en: new Date().toISOString(), ...extra }).eq('id', runId);
+
   let conCambios = 0, totalNuevas = 0, errores = 0;
+  try {
   for (let i = 0; i < procesos.length; i++) {
     const p = procesos[i];
+    await marcarProgreso({ proceso_actual: p.radicado });
     try {
       // consGuardada = mayor consActuacion ya almacenado para este proceso
       const { data: ult } = await db.from('actuaciones')
@@ -172,6 +181,7 @@ async function correrSupabase() {
         ultimo_check_en: new Date().toISOString(),
       }).eq('id', p.id);
     } catch (e) { console.log(`   ❌ ${p.radicado} ${e.message}`); errores++; }
+    await marcarProgreso({ procesados: i + 1, con_cambios: conCambios, errores });
     await sleep(PAUSA_MS);
     // Mismo respiro de 3-5 min que en dry-run: evita el bloqueo 403 del servidor de la Rama
     if ((i + 1) % RESPIRO_CADA === 0 && i + 1 < procesos.length) {
@@ -180,6 +190,11 @@ async function correrSupabase() {
       await sleep(ms);
     }
   }
+  } catch (e) {
+    await marcarProgreso({ estado: 'error', proceso_actual: null, terminado_en: new Date().toISOString() });
+    throw e;
+  }
+  await marcarProgreso({ estado: 'completado', proceso_actual: null, terminado_en: new Date().toISOString() });
   console.log(`\n===== RESUMEN =====`);
   console.log(`Procesos con novedades : ${conCambios}`);
   console.log(`Actuaciones nuevas     : ${totalNuevas}  (alertas creadas, pendientes de notificar)`);

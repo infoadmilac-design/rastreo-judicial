@@ -77,7 +77,7 @@ const data = {
     };
   },
 
-  async procesos(q = '') {
+  async procesos(q = '', sort = '') {
     if (!HAS_DB) {
       const d = await cargarDemo();
       const s = q.toLowerCase();
@@ -94,8 +94,19 @@ const data = {
       if (idsCliente.length) orParts.push(`cliente_id.in.(${idsCliente.join(',')})`);
       query = query.or(orParts.join(','));
     }
+    if (sort === 'recientes') query = query.order('ultimo_check_en', { ascending: false, nullsFirst: false });
+    else if (sort === 'antiguos') query = query.order('ultimo_check_en', { ascending: true, nullsFirst: false });
     const { data: rows } = await query;
     return (rows || []).map(p => ({ ...p, cliente: p.clientes?.nombre, abogado: p.abogados?.nombre }));
+  },
+
+  // --- Progreso en vivo de la corrida de rastreo (para el widget de Inicio) ---
+  async rastreoActual() {
+    if (!HAS_DB) return null;
+    const { data: run } = await db.from('rastreo_runs')
+      .select('id, estado, total, procesados, con_cambios, errores, proceso_actual, iniciado_en, actualizado_en, terminado_en')
+      .order('iniciado_en', { ascending: false }).limit(1).maybeSingle();
+    return run || null;
   },
 
   async cambios() {
@@ -225,7 +236,8 @@ const server = createServer(async (req, res) => {
       if (!HAS_DB && req.method !== 'GET') return json(res, 403, { error: 'CRUD deshabilitado en modo demostración. Conecta Supabase.' });
       const m = path.match(/^\/api\/procesos\/(.+)$/);
       if (path === '/api/stats') return json(res, 200, await data.stats());
-      if (path === '/api/procesos' && req.method === 'GET') return json(res, 200, await data.procesos(url.searchParams.get('q') || ''));
+      if (path === '/api/rastreo-actual') return json(res, 200, await data.rastreoActual());
+      if (path === '/api/procesos' && req.method === 'GET') return json(res, 200, await data.procesos(url.searchParams.get('q') || '', url.searchParams.get('sort') || ''));
       if (path === '/api/procesos' && req.method === 'POST') return json(res, 200, await data.crearProceso(await body(req)));
       if (m && req.method === 'PUT') return json(res, 200, await data.editarProceso(m[1], await body(req)));
       if (m && req.method === 'DELETE') return json(res, 200, await data.borrarProceso(m[1]));

@@ -20,6 +20,11 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       EMAIL_CENTRAL: ${{ secrets.EMAIL_CENTRAL }}
+      WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+      WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+      WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
+      WHATSAPP_LANG: ${{ secrets.WHATSAPP_LANG }}
+      WHATSAPP_CENTRAL: ${{ secrets.WHATSAPP_CENTRAL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,8 +39,8 @@ jobs:
       - name: Rastrear procesos (detecta actuaciones nuevas -> alertas)
         run: cd worker && node rastrear.mjs
 
-      - name: Notificar alertas pendientes por correo
-        # continue-on-error: hasta que se configuren RESEND_API_KEY/EMAIL_CENTRAL,
-        # este paso fallará pero no debe tumbar el rastreo (que ya quedó guardado en Supabase).
+      - name: Notificar alertas pendientes (correo + WhatsApp)
+        # continue-on-error: si falta configurar algún secreto, este paso no debe
+        # tumbar el rastreo (que ya quedó guardado en Supabase).
         continue-on-error: true
         run: cd notify && node notificar.mjs

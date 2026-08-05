@@ -234,6 +234,27 @@ create trigger trg_clientes_upd before update on clientes
   for each row execute function set_actualizado_en();
 
 -- ---------------------------------------------------------------------
+--  Estado de la corrida en vivo (para el widget de progreso del dashboard)
+-- ---------------------------------------------------------------------
+do $$ begin
+  create type estado_rastreo_run as enum ('corriendo', 'completado', 'error');
+exception when duplicate_object then null; end $$;
+
+create table if not exists rastreo_runs (
+  id             uuid primary key default gen_random_uuid(),
+  estado         estado_rastreo_run not null default 'corriendo',
+  total          integer not null default 0,
+  procesados     integer not null default 0,
+  con_cambios    integer not null default 0,
+  errores        integer not null default 0,
+  proceso_actual text,                 -- radicado que se está consultando ahora mismo
+  iniciado_en    timestamptz not null default now(),
+  actualizado_en timestamptz not null default now(),
+  terminado_en   timestamptz
+);
+create index if not exists idx_rastreo_runs_iniciado on rastreo_runs (iniciado_en desc);
+
+-- ---------------------------------------------------------------------
 --  Vistas útiles para el dashboard
 -- ---------------------------------------------------------------------
 -- Procesos con su última actuación y abogado asignado
