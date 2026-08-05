@@ -748,7 +748,8 @@ function abrirDrawer(p){
       <div class="k">Últ. actuación</div><div>${fdate(p.fecha_ultima_actuacion)||'—'}</div>
       <div class="k">Últ. revisión</div><div>${p.ultimo_check_en?`${fdatetime(p.ultimo_check_en)} <span class="sub">(${haceTiempo(p.ultimo_check_en)})</span>`:(p.api_trackable?'<span class="tag no">Sin revisar aún</span>':'—')}</div>
     </div>
-    ${p.ultima_actuacion_texto?`<div class="note">${esc(p.ultima_actuacion_texto)}</div>`:''}`;
+    ${p.ultima_actuacion_texto?`<div class="note">${esc(p.ultima_actuacion_texto)}</div>`:''}
+    ${p.conDocumentos?`<div class="note" style="margin-top:8px;background:var(--okbg);border-color:#bfe6cd;color:#155c33">📎 Esta actuación trae documentos (autos, archivos) — descárgalos entrando al proceso en la Rama Judicial.</div>`:''}`;
   const foot=$('#d-foot');foot.innerHTML='';
   if(p.radicado){
     const b1=document.createElement('button');b1.className='btn sec';b1.innerHTML='📋 Copiar radicado';b1.onclick=()=>copiar(p.radicado);
@@ -781,7 +782,17 @@ $('#nav').onclick=e=>{const b=e.target.closest('button');if(b)ir(b.dataset.t);};
 $('#gsearch').oninput=e=>{busq=e.target.value;clearTimeout(window._t);window._t=setTimeout(()=>{
   if($('#titulo').textContent!=='Procesos'){ir('procesos');}else pintarProcesos();},280);};
 
-(async()=>{await cargarStats();vistas.inicio();})();
+(async()=>{
+  await cargarStats();
+  const params=new URLSearchParams(location.search);
+  const radDeep=params.get('radicado');
+  if(radDeep && MODO==='real'){
+    ir('procesos');
+    try{await verPorRad(radDeep);}catch{}
+  } else {
+    vistas.inicio();
+  }
+})();
 </script>
 </body>
 </html>

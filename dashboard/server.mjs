@@ -98,7 +98,15 @@ const data = {
     if (sort === 'recientes') query = query.order('ultimo_check_en', { ascending: false, nullsFirst: false });
     else if (sort === 'antiguos') query = query.order('ultimo_check_en', { ascending: true, nullsFirst: false });
     const { data: rows } = await query;
-    return (rows || []).map(p => ({ ...p, cliente: p.clientes?.nombre, abogado: p.abogados?.nombre }));
+    const out = (rows || []).map(p => ({ ...p, cliente: p.clientes?.nombre, abogado: p.abogados?.nombre }));
+    // Si la búsqueda resolvió a un único proceso (caso típico: abrir por radicado
+    // desde un link de WhatsApp), se adjunta si su última actuación trae documentos.
+    if (out.length === 1) {
+      const { data: ult } = await db.from('actuaciones').select('con_documentos')
+        .eq('proceso_id', out[0].id).order('cons_actuacion', { ascending: false }).limit(1).maybeSingle();
+      out[0].conDocumentos = !!ult?.con_documentos;
+    }
+    return out;
   },
 
   // --- Progreso en vivo de la corrida de rastreo (para el widget de Inicio) ---

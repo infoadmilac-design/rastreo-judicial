@@ -55,9 +55,10 @@ async function correrProduccion() {
   // bombardeo de WhatsApp/correo — se manda un aviso de que hay que revisar
   // a mano en vez de saturar al número central (ver LIMITE_SEGURIDAD abajo).
   const LIMITE_SEGURIDAD = 30;
+  const dashboardUrl = process.env.DASHBOARD_URL || 'https://rastreo-judicial.onrender.com';
   const { data: alertas, error } = await db
     .from('alertas')
-    .select('id, tipo, detalle, proceso_id, actuacion_id, procesos(radicado, despacho, clientes(nombre)), actuaciones(fecha_actuacion, tipo, anotacion)')
+    .select('id, tipo, detalle, proceso_id, actuacion_id, procesos(radicado, despacho, clientes(nombre)), actuaciones(fecha_actuacion, tipo, anotacion, con_documentos)')
     .eq('estado', 'pendiente').order('creado_en', { ascending: true }).limit(LIMITE_SEGURIDAD + 1);
   if (error) throw error;
   if (!alertas.length) { console.log('No hay alertas pendientes.'); return; }
@@ -95,7 +96,9 @@ async function correrProduccion() {
     }
 
     if (waCentral) {
-      const resumen = `${primera.tipo || 'Novedad'} (${primera.fecha_actuacion || 'sin fecha'})`;
+      const link = p.radicado ? `${dashboardUrl}/?radicado=${encodeURIComponent(p.radicado)}` : dashboardUrl;
+      const docs = primera.con_documentos ? ' 📎 Con documentos para descargar.' : '';
+      const resumen = `${primera.tipo || 'Novedad'} (${primera.fecha_actuacion || 'sin fecha'}).${docs} Ver detalle: ${link}`;
       const cuerpo = `${p.radicado} · ${p.clientes?.nombre || 'sin cliente'} · ${resumen}`;
       const { data: notif } = await db.from('notificaciones').insert({
         alerta_id: al.id, canal: 'whatsapp', destinatario_tipo: 'centro',
