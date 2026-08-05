@@ -224,7 +224,18 @@ async function pintarLive(){
   if(!el)return; // se salió de Inicio: no seguir sondeando
   let r=null;
   try{r=await api('/rastreo-actual');}catch{}
-  if(!r){el.innerHTML='';return;}
+  if(!r){
+    el.innerHTML=`
+      <div class="panel" style="margin-bottom:16px">
+        <h3>🩺 Estado de la revisión</h3>
+        <div class="body">
+          <div class="sub">Todavía no hay ninguna corrida registrada con el nuevo monitor de progreso.
+          La revisión automática corre 2 veces al día (6:00 a.m. y 5:00 p.m. hora Colombia); en cuanto empiece la próxima, este panel se va a actualizar solo mostrando el avance en vivo.</div>
+        </div>
+      </div>`;
+    clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,30000);
+    return;
+  }
   const total=r.total||0,proc=r.procesados||0;
   const pct=total?Math.round(proc/total*100):0;
   const circ=2*Math.PI*30,off=circ*(1-pct/100);
@@ -255,7 +266,7 @@ async function pintarLive(){
         </div>
       </div>
     </div>`;
-  if(corriendo){clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,5000);}
+  clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,corriendo?5000:30000);
 }
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);};
 const copiar=async(txt)=>{try{await navigator.clipboard.writeText(txt);toast('Copiado ✓');}catch{toast('No se pudo copiar');}};
