@@ -95,8 +95,13 @@ const data = {
       if (idsCliente.length) orParts.push(`cliente_id.in.(${idsCliente.join(',')})`);
       query = query.or(orParts.join(','));
     }
-    if (sort === 'recientes') query = query.order('ultimo_check_en', { ascending: false, nullsFirst: false });
-    else if (sort === 'antiguos') query = query.order('ultimo_check_en', { ascending: true, nullsFirst: false });
+    const ORDEN = {
+      rev_desc: ['ultimo_check_en', false], rev_asc: ['ultimo_check_en', true],
+      act_desc: ['fecha_ultima_actuacion', false], act_asc: ['fecha_ultima_actuacion', true],
+      // Alias históricos (dropdown viejo del dashboard) por compatibilidad.
+      recientes: ['ultimo_check_en', false], antiguos: ['ultimo_check_en', true],
+    };
+    if (ORDEN[sort]) { const [campo, asc] = ORDEN[sort]; query = query.order(campo, { ascending: asc, nullsFirst: false }); }
     const { data: rows } = await query;
     const out = (rows || []).map(p => ({ ...p, cliente: p.clientes?.nombre, abogado: p.abogados?.nombre }));
     // Si la búsqueda resolvió a un único proceso (caso típico: abrir por radicado
@@ -309,8 +314,12 @@ const data = {
       return Object.entries(mapa).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([nombre, total]) => ({ nombre, total }));
     };
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString();
+    const inicioMesFecha = inicioMes.slice(0, 10); // solo fecha, para comparar contra fecha_actuacion (columna date)
     const procesosNuevosEsteMes = lista.filter(p => p.creado_en >= inicioMes).length;
-    const { count: actuacionesEsteMes } = await db.from('actuaciones').select('*', { count: 'exact', head: true }).gte('creado_en', inicioMes);
+    // Ojo: se filtra por fecha_actuacion (la fecha real del movimiento judicial), NO por
+    // creado_en de la fila — creado_en solo refleja cuándo la guardamos nosotros, y una
+    // carga masiva histórica (backfill) infla ese número sin que sean cambios reales del mes.
+    const { count: actuacionesEsteMes } = await db.from('actuaciones').select('*', { count: 'exact', head: true }).gte('fecha_actuacion', inicioMesFecha);
     const porAdoptar = lista.filter(p => !p.abogado_id && p.estado === 'activo').length;
     return {
       antiguedad, porJurisdiccion: contarPor('jurisdiccion'), porEspecialidad: contarPor('tipo_proceso'),

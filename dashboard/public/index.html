@@ -413,11 +413,6 @@ const vistas={
       ${MODO==='demo'?'<div class="note" style="margin-bottom:14px">📌 <b>Modo demostración</b>: se ven tus procesos migrados (solo lectura). Al conectar Supabase se habilita crear, editar y eliminar.</div>':''}
       <div class="toolbar">
         <div class="chips">${chips.map(([k,l])=>`<button class="chip ${filtro===k?'on':''}" onclick="setFiltro('${k}')">${l}</button>`).join('')}</div>
-        ${MODO==='real'?`<select onchange="setOrden(this.value)" style="margin-left:10px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--txt)">
-          <option value="" ${orden===''?'selected':''}>Sin ordenar</option>
-          <option value="recientes" ${orden==='recientes'?'selected':''}>Revisados más recientes primero</option>
-          <option value="antiguos" ${orden==='antiguos'?'selected':''}>Revisados más antiguos primero</option>
-        </select>`:''}
         <div style="margin-left:${MODO==='real'?'10px':'auto'};display:flex;gap:8px">${MODO==='real'?'<button class="btn sec" onclick="abrirIngest()">📥 Cargar procesos</button><button class="btn" onclick="abrirNuevo()">＋ Nuevo proceso</button>':''}</div>
       </div>
       <div id="tabla"></div>`;
@@ -615,11 +610,17 @@ function procesosFiltrados(){
   else if(filtro==='revisados')r=r.filter(p=>!!p.ultimo_check_en);
   return r;
 }
+const thOrden=(label,key)=>{
+  const dir=orden===key+'_asc'?'asc':(orden===key+'_desc'?'desc':null);
+  const icon=dir==='asc'?' ▲':(dir==='desc'?' ▼':'');
+  return `<th style="cursor:pointer;user-select:none" onclick="toggleOrden('${key}')" title="Ordenar por ${esc(label)}">${esc(label)}${icon}</th>`;
+};
+window.toggleOrden=key=>{const desc=key+'_desc',asc=key+'_asc';orden=orden===desc?asc:(orden===asc?'':desc);pintarProcesos();};
 async function pintarProcesos(){
   PROCS=await api('/procesos?q='+encodeURIComponent(busq)+(orden?'&sort='+orden:''));
   const r=procesosFiltrados();
   $('#tabla').innerHTML=r.length?`<div class="tablewrap"><table><thead><tr>
-    <th>Radicado / ID</th><th>Cliente</th><th>Despacho</th><th>Rastreo</th><th>Estado</th><th>Última actuación</th><th>Última revisión</th>${MODO==='real'?'<th></th>':''}</tr></thead>
+    <th>Radicado / ID</th><th>Cliente</th><th>Despacho</th><th>Rastreo</th><th>Estado</th>${thOrden('Última actuación','act')}${thOrden('Última revisión','rev')}${MODO==='real'?'<th></th>':''}</tr></thead>
     <tbody>${r.map((p,i)=>`<tr onclick="verDetalle(${i})">
       <td><span class="radbtn">${esc(p.radicado||p.origen_id_raw||'—')}</span><div class="sub">${esc(p.sede||'')}</div></td>
       <td>${esc(p.cliente||'')}</td>
