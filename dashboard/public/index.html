@@ -316,7 +316,10 @@ const vistas={
         <div class="panel"><h3>📅 Próximos vencimientos <span class="see" onclick="ir('vencimientos')">Ver todos →</span></h3><div class="body" id="ini-venc"></div></div>
       </div>`;
     const camb=await api('/cambios');
-    $('#ini-camb').innerHTML=camb.length?tablaMini(camb.slice(0,6).map(a=>[fdate(a.creado_en),`<b class="radbtn">${esc(a.radicado||'')}</b>`,esc(a.titulo||'')]))
+    const conDocs=camb.slice(0,6).filter(a=>a.conDocumentos).length;
+    $('#ini-camb').innerHTML=camb.length?
+      (conDocs?`<div class="note" style="margin-bottom:10px">📎 <b>${conDocs}</b> cambio(s) reciente(s) traen documentos (autos, archivos) — descárgalos entrando al proceso en la <a href="${RAMA}" target="_blank">Rama Judicial</a>.</div>`:'')
+      +tablaMini(camb.slice(0,6).map(a=>[fdate(a.creado_en),`<b>${esc(a.cliente||'sin cliente')}</b><div class="sub radbtn">${esc(a.radicado||'')}</div>`,esc(a.titulo||'')+(a.conDocumentos?' <span class="tag no" title="Trae documentos para descargar">📎 documentos</span>':'')]))
       : emptyMini('🔕','Aún no hay cambios detectados','El motor los creará al detectar actuaciones nuevas.');
     const venc=await api('/vencimientos'); const hoy=new Date().toISOString().slice(0,10);
     const prox=venc.filter(v=>v.fecha>=hoy).slice(0,6); const usar=prox.length?prox:venc.slice(-6);
@@ -344,11 +347,14 @@ const vistas={
 
   async cambios(){
     const rows=await api('/cambios');
-    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Radicado</th><th>Cliente</th><th>Novedad</th><th>Estado</th></tr></thead><tbody>${rows.map(a=>`<tr onclick="verPorRad('${esc(a.radicado||'')}')">
+    const conDocs=rows.filter(a=>a.conDocumentos).length;
+    const aviso=conDocs?`<div class="note" style="margin-bottom:14px">📎 <b>${conDocs}</b> cambio(s) traen documentos (autos, archivos) disponibles — entra al proceso en la <a href="${RAMA}" target="_blank">Rama Judicial</a> para descargarlos.</div>`:'';
+    content.innerHTML=(aviso)+(rows.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Radicado</th><th>Cliente</th><th>Novedad</th><th>Documentos</th><th>Estado</th></tr></thead><tbody>${rows.map(a=>`<tr onclick="verPorRad('${esc(a.radicado||'')}')">
       <td>${fdate(a.creado_en)}</td><td class="radbtn">${esc(a.radicado||'')}</td><td>${esc(a.cliente||'')}</td>
       <td>${esc(a.titulo||'')}<div class="sub">${esc((a.detalle||'').slice(0,80))}</div></td>
+      <td>${a.conDocumentos?'<span class="tag no">📎 Sí</span>':''}</td>
       <td><span class="tag ${a.estado==='pendiente'?'pend':'env'}">${esc(a.estado)}</span></td></tr>`).join('')}</tbody></table></div>`
-      : empty('🔕','Sin cambios por ahora','Cuando el motor de rastreo detecte una actuación nueva, aparecerá aquí y se enviará la alerta.');
+      : empty('🔕','Sin cambios por ahora','Cuando el motor de rastreo detecte una actuación nueva, aparecerá aquí y se enviará la alerta.'));
   },
 
   async notificaciones(){

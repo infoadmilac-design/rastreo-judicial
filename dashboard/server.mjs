@@ -112,9 +112,12 @@ const data = {
   async cambios() {
     if (!HAS_DB) return [];   // en demo aún no hay actuaciones detectadas
     const { data: rows } = await db.from('alertas')
-      .select('id, tipo, titulo, detalle, estado, creado_en, procesos(radicado, clientes(nombre))')
+      .select('id, tipo, titulo, detalle, estado, creado_en, procesos(radicado, clientes(nombre)), actuaciones(con_documentos)')
       .order('creado_en', { ascending: false }).limit(200);
-    return (rows || []).map(a => ({ ...a, radicado: a.procesos?.radicado, cliente: a.procesos?.clientes?.nombre }));
+    return (rows || []).map(a => ({
+      ...a, radicado: a.procesos?.radicado, cliente: a.procesos?.clientes?.nombre,
+      conDocumentos: !!a.actuaciones?.con_documentos,
+    }));
   },
 
   async notificaciones() {
