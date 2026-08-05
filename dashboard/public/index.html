@@ -6,10 +6,10 @@
 <title>Rastreo Judicial · Panel de Control</title>
 <style>
   :root{
-    --navy:#14315e; --navy2:#1e4a86; --accent:#c8860d; --bg:#eef1f6; --panel:#fff;
-    --line:#e4e9f0; --txt:#1f2a3a; --mut:#6b7a90; --ok:#1a7f43; --okbg:#e5f6ec;
-    --warn:#b23; --warnbg:#fdeaea; --info:#2a5aa0; --infobg:#e8f0fe; --soft:#f7f9fc;
-    --radius:12px; --shadow:0 1px 3px rgba(20,49,94,.06),0 4px 16px rgba(20,49,94,.05);
+    --navy:#16181d; --navy2:#2a2e37; --accent:#c8860d; --bg:#f6f7f9; --panel:#fff;
+    --line:#e5e7eb; --txt:#16181d; --mut:#6b7280; --ok:#1a7f43; --okbg:#e5f6ec;
+    --warn:#b23; --warnbg:#fdeaea; --info:#2a5aa0; --infobg:#e8f0fe; --soft:#f9fafb;
+    --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.04);
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -18,20 +18,20 @@
   .app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
 
   /* Sidebar */
-  aside{background:var(--navy);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
-  .brand{padding:20px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.1)}
-  .brand .logo{width:34px;height:34px;background:var(--accent);border-radius:9px;display:grid;place-items:center;font-size:18px}
-  .brand b{font-size:15px;line-height:1.15}
-  .brand span{display:block;font-size:11px;color:#a9bbd6;font-weight:400}
+  aside{background:var(--panel);color:var(--txt);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;border-right:1px solid var(--line)}
+  .brand{padding:20px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+  .brand .logo{width:34px;height:34px;background:var(--navy);color:#fff;border-radius:9px;display:grid;place-items:center;font-size:18px}
+  .brand b{font-size:15px;line-height:1.15;color:var(--txt)}
+  .brand span{display:block;font-size:11px;color:var(--mut);font-weight:400}
   nav{padding:10px 10px;flex:1}
-  nav button{width:100%;display:flex;align-items:center;gap:11px;background:none;border:none;color:#c3d1e6;
+  nav button{width:100%;display:flex;align-items:center;gap:11px;background:none;border:none;color:#444b57;
     padding:11px 12px;border-radius:9px;font-size:14px;cursor:pointer;text-align:left;margin-bottom:2px}
   nav button .ico{width:20px;text-align:center;font-size:15px}
-  nav button .badge{margin-left:auto;background:rgba(255,255,255,.14);color:#fff;font-size:11px;padding:1px 8px;border-radius:20px;min-width:22px;text-align:center}
-  nav button:hover{background:rgba(255,255,255,.08);color:#fff}
-  nav button.act{background:#fff;color:var(--navy);font-weight:600}
+  nav button .badge{margin-left:auto;background:#eef0f3;color:#444b57;font-size:11px;padding:1px 8px;border-radius:20px;min-width:22px;text-align:center}
+  nav button:hover{background:var(--soft);color:var(--txt)}
+  nav button.act{background:#eef0f3;color:var(--txt);font-weight:600}
   nav button.act .badge{background:var(--accent);color:#fff}
-  .side-foot{padding:14px 16px;font-size:11px;color:#8ea4c6;border-top:1px solid rgba(255,255,255,.1)}
+  .side-foot{padding:14px 16px;font-size:11px;color:var(--mut);border-top:1px solid var(--line)}
 
   /* Topbar */
   main{display:flex;flex-direction:column;min-width:0}
@@ -149,6 +149,9 @@
       <button data-t="inicio" class="act"><span class="ico">🏠</span> Inicio</button>
       <button data-t="consulta"><span class="ico">📡</span> Consulta en vivo</button>
       <button data-t="procesos"><span class="ico">📁</span> Procesos <span class="badge" id="b-proc">·</span></button>
+      <button data-t="clientes"><span class="ico">👤</span> Clientes <span class="badge" id="b-cli">·</span></button>
+      <button data-t="despachos"><span class="ico">🏛️</span> Despachos</button>
+      <button data-t="calendario"><span class="ico">🗓️</span> Calendario</button>
       <button data-t="cambios"><span class="ico">🔔</span> Cambios <span class="badge" id="b-camb">·</span></button>
       <button data-t="notificaciones"><span class="ico">📤</span> Notificaciones</button>
       <button data-t="vencimientos"><span class="ico">📅</span> Vencimientos <span class="badge" id="b-venc">·</span></button>
@@ -198,11 +201,54 @@
   </div>
 </dialog>
 
+<!-- Dialog Cliente -->
+<dialog id="dlgCli">
+  <div class="dlg-h" id="dlgCliTitle">Cliente</div>
+  <div class="dlg-b">
+    <div class="row2">
+      <div><label>Nombre / Razón social</label><input id="fc_nombre"></div>
+      <div><label>Tipo</label><select id="fc_tipo"><option value="persona">Persona</option><option value="empresa">Empresa</option></select></div>
+    </div>
+    <div><label>Documento (cédula / NIT)</label><input id="fc_documento"></div>
+    <div class="row2">
+      <div><label>Teléfono</label><input id="fc_telefono"></div>
+      <div><label>Email</label><input id="fc_email"></div>
+    </div>
+  </div>
+  <div class="dlg-f">
+    <button class="btn sec" onclick="dlgCli.close()">Cancelar</button>
+    <button class="btn" id="dlgCliSave">Guardar</button>
+  </div>
+</dialog>
+
+<!-- Dialog Cargar procesos (masivo) -->
+<dialog id="dlgIngest" style="width:560px">
+  <div class="dlg-h">📥 Cargar procesos</div>
+  <div class="dlg-b">
+    <div><label>Fuente</label>
+      <select id="fi_fuente">
+        <option value="rama_judicial">Rama Judicial / Fiscalía (rastreo automático)</option>
+        <option value="siugj">SIUGJ — juzgados con expediente electrónico (manual)</option>
+        <option value="superfinanciera">Superintendencia Financiera (manual)</option>
+        <option value="sic">Superintendencia de Industria y Comercio (manual)</option>
+      </select>
+    </div>
+    <div id="fi-nota" class="note" style="font-size:12.5px"></div>
+    <div><label>Radicados (uno por línea)</label><textarea id="fi_radicados" rows="8" placeholder="25000234200020180182301&#10;25000233600020210033100" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:ui-monospace,monospace;resize:vertical"></textarea></div>
+  </div>
+  <div class="dlg-f">
+    <button class="btn sec" onclick="dlgIngest.close()">Cancelar</button>
+    <button class="btn" id="fi_btn">Cargar</button>
+  </div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script>
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 const content=$('#content'); let MODO='demo', PROCS=[], filtro='todos', busq='', orden='';
+let CLIENTES=[], clienteFiltro='todos', DESPACHOS=[];
+let calVista='mes', calFecha=new Date();
 const RAMA='https://consultaprocesos.ramajudicial.gov.co/Procesos/NumeroRadicacion';
 
 const api=async(p,o)=>{const r=await fetch('/api'+p,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json();};
@@ -268,6 +314,37 @@ async function pintarLive(){
     </div>`;
   clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,corriendo?5000:30000);
 }
+async function pintarAnalitica(){
+  const el=document.getElementById('ini-analitica');
+  if(!el)return;
+  let an=null; try{an=await api('/analitica');}catch{}
+  if(!an){el.innerHTML='';return;}
+  const barra=(nombre,total,max,color)=>`<div style="margin-bottom:9px">
+    <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px"><span>${esc(nombre)}</span><b>${total}</b></div>
+    <div style="background:var(--soft);border-radius:6px;height:8px;overflow:hidden"><div style="width:${max?Math.round(total/max*100):0}%;background:${color};height:100%"></div></div>
+  </div>`;
+  const a=an.antiguedad;
+  const maxAnt=Math.max(a.m0_6,a.m6_12,a.mas12,a.sin,1);
+  const maxJur=Math.max(1,...an.porJurisdiccion.map(x=>x.total));
+  const maxEsp=Math.max(1,...an.porEspecialidad.map(x=>x.total));
+  el.innerHTML=`
+    <div class="grid stats" style="margin-bottom:16px">
+      <div class="stat"><div class="n">${an.actuacionesEsteMes}</div><div class="l">📈 Actuaciones este mes</div></div>
+      <div class="stat"><div class="n">${an.procesosNuevosEsteMes}</div><div class="l">🆕 Procesos nuevos este mes</div></div>
+      <div class="stat"><div class="n">${an.porAdoptar}</div><div class="l">🙋 Por adoptar (sin abogado)</div></div>
+    </div>
+    <div class="grid two" style="margin-bottom:16px">
+      <div class="panel"><h3>⏳ Antigüedad de la última actuación</h3><div class="body" style="padding:16px">
+        ${barra('0–6 meses',a.m0_6,maxAnt,'var(--ok)')}${barra('6–12 meses',a.m6_12,maxAnt,'var(--accent)')}${barra('Más de 12 meses',a.mas12,maxAnt,'var(--warn)')}${barra('Sin actuación registrada',a.sin,maxAnt,'var(--mut)')}
+      </div></div>
+      <div class="panel"><h3>⚖️ Por jurisdicción</h3><div class="body" style="padding:16px">
+        ${an.porJurisdiccion.length?an.porJurisdiccion.map(x=>barra(x.nombre,x.total,maxJur,'var(--info)')).join(''):'<div class="sub">Sin datos para mostrar</div>'}
+      </div></div>
+    </div>
+    <div class="panel" style="margin-bottom:16px"><h3>📂 Por especialidad</h3><div class="body" style="padding:16px">
+      ${an.porEspecialidad.length?an.porEspecialidad.map(x=>barra(x.nombre,x.total,maxEsp,'var(--navy2)')).join(''):'<div class="sub">Sin datos para mostrar</div>'}
+    </div></div>`;
+}
 const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);};
 const copiar=async(txt)=>{try{await navigator.clipboard.writeText(txt);toast('Copiado ✓');}catch{toast('No se pudo copiar');}};
 const resaltarVars=t=>esc(t).replace(/\{\{(\w+)\}\}/g,'<span class="var">{{$1}}</span>');
@@ -281,7 +358,7 @@ async function cargarStats(){
   const m=$('#modo'); m.className='modo '+(MODO==='real'?'real':'demo');
   m.textContent=MODO==='real'?'● Modo real · edición activa':'● Modo demostración';
   $('#b-proc').textContent=STATS.procesos; $('#b-venc').textContent=STATS.audiencias;
-  $('#b-camb').textContent=STATS.alertasPendientes;
+  $('#b-camb').textContent=STATS.alertasPendientes; $('#b-cli').textContent=STATS.clientes??'·';
 }
 
 const vistas={
@@ -311,10 +388,12 @@ const vistas={
       <div class="grid stats">${cards.map(([i,l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${i} ${l}</div></div>`).join('')}</div>
       ${bannerRevision}
       <div id="ini-live"></div>
+      <div id="ini-analitica"></div>
       <div class="grid two">
         <div class="panel"><h3>🔔 Últimos cambios <span class="see" onclick="ir('cambios')">Ver todos →</span></h3><div class="body" id="ini-camb"></div></div>
         <div class="panel"><h3>📅 Próximos vencimientos <span class="see" onclick="ir('vencimientos')">Ver todos →</span></h3><div class="body" id="ini-venc"></div></div>
       </div>`;
+    if(MODO==='real')pintarAnalitica();
     const camb=await api('/cambios');
     const conDocs=camb.slice(0,6).filter(a=>a.conDocumentos).length;
     $('#ini-camb').innerHTML=camb.length?
@@ -339,7 +418,7 @@ const vistas={
           <option value="recientes" ${orden==='recientes'?'selected':''}>Revisados más recientes primero</option>
           <option value="antiguos" ${orden==='antiguos'?'selected':''}>Revisados más antiguos primero</option>
         </select>`:''}
-        <div style="margin-left:${MODO==='real'?'10px':'auto'}">${MODO==='real'?'<button class="btn" onclick="abrirNuevo()">＋ Nuevo proceso</button>':''}</div>
+        <div style="margin-left:${MODO==='real'?'10px':'auto'};display:flex;gap:8px">${MODO==='real'?'<button class="btn sec" onclick="abrirIngest()">📥 Cargar procesos</button><button class="btn" onclick="abrirNuevo()">＋ Nuevo proceso</button>':''}</div>
       </div>
       <div id="tabla"></div>`;
     pintarProcesos();
@@ -398,7 +477,49 @@ const vistas={
         <div class="th"><b>${esc(t.nombre)}</b> <span class="tag act">${t.canal==='whatsapp'?'💬 WhatsApp':(t.canal==='email'?'✉️ Correo':'General')}</span>
         <button class="mini" style="margin-left:auto" onclick='copiar(${JSON.stringify(t.cuerpo)})'>📋 Copiar</button></div>
         <div class="cuerpo">${resaltarVars(t.cuerpo)}</div></div>`).join('')
-      : empty('📝','Sin plantillas','')); }
+      : empty('📝','Sin plantillas','')); },
+
+  async clientes(){
+    content.innerHTML=`
+      <div class="toolbar">
+        <div class="chips">${[['todos','Todos'],['persona','Personas'],['empresa','Empresas']].map(([k,l])=>`<button class="chip ${clienteFiltro===k?'on':''}" onclick="setClienteFiltro('${k}')">${l}</button>`).join('')}</div>
+        ${MODO==='real'?'<button class="btn" style="margin-left:auto" onclick="abrirNuevoCliente()">＋ Nuevo cliente</button>':''}
+      </div>
+      <div id="tabla-cli"></div>`;
+    pintarClientes();
+  },
+
+  async despachos(){
+    const rows=await api('/despachos');
+    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr>
+      <th>Despacho</th><th>Municipio</th><th>Especialidad</th><th>Tipo</th><th>Procesos</th><th>Fecha últ. publicación</th><th>Últ. sincronización</th></tr></thead>
+      <tbody>${rows.map(d=>`<tr onclick="ir('procesos')">
+        <td>${esc((d.despacho||'').slice(0,50))}</td>
+        <td>${esc(d.municipio||'—')}</td>
+        <td>${esc(d.especialidad||'—')}</td>
+        <td><span class="tag ${d.tipo==='Rama Judicial'?'si':'no'}">${esc(d.tipo)}</span></td>
+        <td><b>${d.procesos}</b></td>
+        <td>${fdate(d.fechaUltimaPublicacion)||'—'}</td>
+        <td>${d.ultimaSincronizacion?`${fdatetime(d.ultimaSincronizacion)}<div class="sub">${haceTiempo(d.ultimaSincronizacion)}</div>`:'—'}</td>
+      </tr>`).join('')}</tbody></table></div>`
+      : empty('🏛️','Sin despachos','Aparecerán aquí en cuanto tus procesos tengan un despacho asignado.');
+  },
+
+  async calendario(){
+    content.innerHTML=`
+      <div class="toolbar">
+        <button class="mini" onclick="calMover(-1)">‹ Anterior</button>
+        <b style="font-size:15px" id="cal-titulo"></b>
+        <button class="mini" onclick="calMover(1)">Siguiente ›</button>
+        <button class="mini" onclick="calHoy()">Hoy</button>
+        <div class="chips" style="margin-left:auto">
+          <button class="chip ${calVista==='mes'?'on':''}" onclick="setCalVista('mes')">Mes</button>
+          <button class="chip ${calVista==='agenda'?'on':''}" onclick="setCalVista('agenda')">Agenda</button>
+        </div>
+      </div>
+      <div id="cal-body"></div>`;
+    pintarCalendario();
+  },
 };
 
 // ---- Consulta en vivo (Rama Judicial) ----
@@ -515,6 +636,102 @@ async function pintarProcesos(){
 window.setFiltro=k=>{filtro=k;vistas.procesos();};
 window.setOrden=v=>{orden=v;pintarProcesos();};
 
+// ---- Clientes (CRM) ----
+async function pintarClientes(){
+  CLIENTES=await api('/clientes'+(clienteFiltro!=='todos'?'?tipo='+clienteFiltro:''));
+  $('#tabla-cli').innerHTML=CLIENTES.length?`<div class="tablewrap"><table><thead><tr>
+    <th>Nombre</th><th>Tipo</th><th>Documento</th><th>Email</th><th>Teléfono</th><th>Procesos</th><th>Creado</th>${MODO==='real'?'<th></th>':''}</tr></thead>
+    <tbody>${CLIENTES.map((c,i)=>`<tr>
+      <td><b>${esc(c.nombre)}</b></td>
+      <td><span class="tag ${c.tipo==='empresa'?'act':'si'}">${c.tipo==='empresa'?'Empresa':'Persona'}</span></td>
+      <td>${esc(c.documento||'—')}</td>
+      <td>${esc(c.email||'—')}</td>
+      <td>${esc(c.telefono||'—')}</td>
+      <td><b>${c.numProcesos}</b></td>
+      <td>${fdate(c.creado_en)}</td>
+      ${MODO==='real'?`<td onclick="event.stopPropagation()" style="white-space:nowrap"><button class="mini" onclick='editarCliente(${i})'>✏️</button> <button class="mini" onclick="borrarCliente('${c.id}')">🗑️</button></td>`:''}
+    </tr>`).join('')}</tbody></table></div>
+    <div class="sub" style="padding:10px 4px">${CLIENTES.length} cliente(s)</div>`
+    : empty('👤','Sin clientes','Crea el primero para empezar a vincularlo a tus procesos.');
+}
+window.setClienteFiltro=k=>{clienteFiltro=k;vistas.clientes();};
+const dlgCli=$('#dlgCli');let editClienteId=null;
+window.abrirNuevoCliente=()=>{editClienteId=null;$('#dlgCliTitle').textContent='Nuevo cliente';
+  $('#fc_nombre').value='';$('#fc_tipo').value='persona';$('#fc_documento').value='';$('#fc_telefono').value='';$('#fc_email').value='';dlgCli.showModal();};
+window.editarCliente=i=>{const c=CLIENTES[i];editClienteId=c.id;$('#dlgCliTitle').textContent='Editar cliente';
+  $('#fc_nombre').value=c.nombre||'';$('#fc_tipo').value=c.tipo||'persona';$('#fc_documento').value=c.documento||'';
+  $('#fc_telefono').value=c.telefono||'';$('#fc_email').value=c.email||'';dlgCli.showModal();};
+window.borrarCliente=async id=>{if(!confirm('¿Eliminar este cliente?'))return;await api('/clientes/'+id,{method:'DELETE'});toast('Cliente eliminado');pintarClientes();cargarStats();};
+$('#dlgCliSave').onclick=async()=>{
+  const nombre=$('#fc_nombre').value.trim();
+  if(!nombre){alert('El nombre es obligatorio');return;}
+  const body={nombre,tipo:$('#fc_tipo').value,documento:$('#fc_documento').value.trim()||null,
+    telefono:$('#fc_telefono').value.trim()||null,email:$('#fc_email').value.trim()||null};
+  try{if(editClienteId)await api('/clientes/'+editClienteId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    else await api('/clientes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    dlgCli.close();toast('Guardado ✓');pintarClientes();cargarStats();}catch(e){alert('Error: '+e.message);}};
+
+// ---- Cargar procesos (masivo) ----
+const dlgIngest=$('#dlgIngest');
+const NOTAS_FUENTE={
+  rama_judicial:'📡 Rastreo automático: el sistema revisa estos procesos 2 veces al día contra el API oficial.',
+  siugj:'✋ Seguimiento manual: SIUGJ no tiene API pública. Consulta el estado a mano en <a href="https://siugj.ramajudicial.gov.co/principalPortal/consultarProceso.php" target="_blank">siugj.ramajudicial.gov.co</a>.',
+  superfinanciera:'✋ Seguimiento manual: la Superfinanciera no tiene API pública. Consulta en <a href="https://www.superfinanciera.gov.co/publicaciones/10114910/haz-seguimiento-a-tus-tramites/" target="_blank">superfinanciera.gov.co</a>.',
+  sic:'✋ Seguimiento manual: la SIC no tiene API pública. Consulta en <a href="https://consultatramites.sic.gov.co/" target="_blank">consultatramites.sic.gov.co</a>.',
+};
+function actualizarNotaFuente(){$('#fi-nota').innerHTML=NOTAS_FUENTE[$('#fi_fuente').value]||'';}
+window.abrirIngest=()=>{$('#fi_radicados').value='';$('#fi_fuente').value='rama_judicial';actualizarNotaFuente();dlgIngest.showModal();};
+$('#fi_fuente').onchange=actualizarNotaFuente;
+$('#fi_btn').onclick=async()=>{
+  const radicados=$('#fi_radicados').value;
+  if(!radicados.trim()){alert('Pega al menos un radicado');return;}
+  try{
+    const r=await api('/procesos/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fuente:$('#fi_fuente').value,radicados})});
+    dlgIngest.close();toast(`${r.creados} proceso(s) cargado(s)${r.omitidos?` · ${r.omitidos} ya existían`:''}`);
+    pintarProcesos();cargarStats();
+  }catch(e){alert('Error: '+e.message);}
+};
+
+// ---- Calendario ----
+const DIAS_SEM=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+window.calMover=n=>{calFecha=new Date(calFecha.getFullYear(),calFecha.getMonth()+n,1);pintarCalendario();};
+window.calHoy=()=>{calFecha=new Date();pintarCalendario();};
+window.setCalVista=v=>{calVista=v;vistas.calendario();};
+async function pintarCalendario(){
+  const rows=await api('/vencimientos');
+  const anio=calFecha.getFullYear(), mes=calFecha.getMonth();
+  $('#cal-titulo').textContent=`${MESES[mes]} ${anio}`;
+  const porDia={};
+  for(const a of rows){if(!a.fecha)continue;(porDia[a.fecha]=porDia[a.fecha]||[]).push(a);}
+  if(calVista==='agenda'){
+    const ymPrefix=`${anio}-${String(mes+1).padStart(2,'0')}`;
+    const delMes=rows.filter(a=>(a.fecha||'').startsWith(ymPrefix)).sort((x,y)=>(x.fecha||'').localeCompare(y.fecha));
+    $('#cal-body').innerHTML=delMes.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Descripción</th><th>Lugar</th></tr></thead>
+      <tbody>${delMes.map(a=>`<tr><td><b>${fdate(a.fecha)}</b></td><td>${esc(a.hora||'')}</td><td>${esc(a.cliente||'')}</td><td>${esc(a.descripcion||'')}</td><td>${esc(a.lugar||'')}</td></tr>`).join('')}</tbody></table></div>`
+      : empty('📭','Sin eventos este mes','');
+    return;
+  }
+  const primerDia=new Date(anio,mes,1).getDay();
+  const diasEnMes=new Date(anio,mes+1,0).getDate();
+  const hoy=new Date();const hoyStr=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+  let celdas=[];
+  for(let i=0;i<primerDia;i++)celdas.push('<div style="min-height:88px;background:var(--soft);border:1px solid var(--line)"></div>');
+  for(let d=1;d<=diasEnMes;d++){
+    const f=`${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const evs=porDia[f]||[];
+    celdas.push(`<div style="min-height:88px;background:#fff;border:1px solid var(--line);padding:6px;font-size:12px${f===hoyStr?';box-shadow:inset 0 0 0 2px var(--navy)':''}">
+      <div style="font-weight:600;margin-bottom:3px">${d}</div>
+      ${evs.slice(0,3).map(e=>`<div class="tag act" style="display:block;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.descripcion||e.cliente||'')}">${esc(e.hora||'')} ${esc(e.cliente||e.descripcion||'')}</div>`).join('')}
+      ${evs.length>3?`<div class="sub">+${evs.length-3} más</div>`:''}
+    </div>`);
+  }
+  $('#cal-body').innerHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:0;border:1px solid var(--line);border-top:none">
+    ${DIAS_SEM.map(d=>`<div style="background:var(--soft);padding:8px;font-size:11.5px;font-weight:600;color:var(--mut);text-align:center;border:1px solid var(--line);border-top:1px solid var(--line)">${d}</div>`).join('')}
+    ${celdas.join('')}
+  </div>`;
+}
+
 // ---- Drawer detalle ----
 window.verDetalle=i=>{const p=procesosFiltrados()[i];abrirDrawer(p);};
 window.verPorRad=async rad=>{if(!rad)return;const r=await api('/procesos?q='+encodeURIComponent(rad));if(r[0])abrirDrawer(r[0]);};
@@ -558,7 +775,7 @@ $('#dlgSave').onclick=async()=>{const rad=$('#f_radicado').value.trim();
     dlg.close();toast('Guardado ✓');pintarProcesos();cargarStats();}catch(e){alert('Error: '+e.message);}};
 
 // ---- Navegación ----
-const titulos={inicio:'Inicio',consulta:'Consulta en vivo',procesos:'Procesos',cambios:'Cambios y alertas',notificaciones:'Notificaciones',vencimientos:'Vencimientos',plantillas:'Plantillas'};
+const titulos={inicio:'Inicio',consulta:'Consulta en vivo',procesos:'Procesos',clientes:'Clientes',despachos:'Despachos',calendario:'Calendario',cambios:'Cambios y alertas',notificaciones:'Notificaciones',vencimientos:'Vencimientos',plantillas:'Plantillas'};
 window.ir=t=>{$$('#nav button').forEach(b=>b.classList.toggle('act',b.dataset.t===t));$('#titulo').textContent=titulos[t];$('#aside').classList.remove('show');vistas[t]();};
 $('#nav').onclick=e=>{const b=e.target.closest('button');if(b)ir(b.dataset.t);};
 $('#gsearch').oninput=e=>{busq=e.target.value;clearTimeout(window._t);window._t=setTimeout(()=>{

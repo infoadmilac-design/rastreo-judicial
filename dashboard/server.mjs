@@ -74,6 +74,7 @@ const data = {
       archivados: (await db.from('procesos').select('*', { count: 'exact', head: true }).eq('estado', 'archivado')).count || 0,
       alertasPendientes: (await db.from('alertas').select('*', { count: 'exact', head: true }).eq('estado', 'pendiente')).count || 0,
       audiencias: await one('audiencias'),
+      clientes: await one('clientes'),
     };
   },
 
@@ -221,6 +222,93 @@ const data = {
   async crearProceso(body) { const { data: r, error } = await db.from('procesos').insert(body).select().single(); if (error) throw error; return r; },
   async editarProceso(id, body) { const { data: r, error } = await db.from('procesos').update(body).eq('id', id).select().single(); if (error) throw error; return r; },
   async borrarProceso(id) { const { error } = await db.from('procesos').delete().eq('id', id); if (error) throw error; return { ok: true }; },
+
+  // --- Carga masiva de radicados (Rama Judicial / Superfinanciera / SIC) ---
+  async ingestarProcesos({ fuente, radicados }) {
+    const lista = (radicados || '').split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lista.length) return { creados: 0, omitidos: 0 };
+    const esRama = fuente === 'rama_judicial';
+    const rows = lista.map(radicado => {
+      const esRadicado23 = /^\d{23}$/.test(radicado);
+      return {
+        radicado, fuente: fuente || 'rama_judicial',
+        tipo_id: esRama && esRadicado23 ? 'radicado_23' : 'otro',
+        api_trackable: esRama && esRadicado23,   // solo Rama Judicial tiene rastreo automático
+        estado: 'activo', sede: 'generales',
+      };
+    });
+    const { data: ins, error } = await db.from('procesos')
+      .upsert(rows, { onConflict: 'radicado', ignoreDuplicates: true }).select('id');
+    if (error) throw error;
+    return { creados: ins?.length || 0, omitidos: lista.length - (ins?.length || 0) };
+  },
+
+  // --- Clientes (CRM) ---
+  async clientes(q = '', tipo = '') {
+    if (!HAS_DB) return [];
+    let query = db.from('clientes').select('id, nombre, tipo, documento, telefono, whatsapp, email, creado_en, procesos(count)');
+    if (tipo) query = query.eq('tipo', tipo);
+    if (q) query = query.or(`nombre.ilike.%${q}%,documento.ilike.%${q}%,email.ilike.%${q}%`);
+    const { data: rows } = await query.order('nombre');
+    return (rows || []).map(c => ({ ...c, numProcesos: c.procesos?.[0]?.count || 0 }));
+  },
+  async crearCliente(body) { const { data: r, error } = await db.from('clientes').insert(body).select().single(); if (error) throw error; return r; },
+  async editarCliente(id, body) { const { data: r, error } = await db.from('clientes').update(body).eq('id', id).select().single(); if (error) throw error; return r; },
+  async borrarCliente(id) { const { error } = await db.from('clientes').delete().eq('id', id); if (error) throw error; return { ok: true }; },
+
+  // --- Despachos (vista agregada por juzgado) ---
+  async despachos() {
+    if (!HAS_DB) return [];
+    const { data: rows } = await db.from('procesos')
+      .select('despacho, juzgado, departamento, tipo_proceso, jurisdiccion, api_trackable, fecha_ultima_actuacion, ultimo_check_en')
+      .not('despacho', 'is', null);
+    const porDespacho = new Map();
+    for (const p of rows || []) {
+      const key = p.despacho || p.juzgado;
+      if (!key) continue;
+      if (!porDespacho.has(key)) {
+        porDespacho.set(key, {
+          despacho: key, municipio: p.departamento || null, especialidad: p.tipo_proceso || null,
+          jurisdiccion: p.jurisdiccion || null, tipo: p.api_trackable ? 'Rama Judicial' : 'Manual',
+          procesos: 0, fechaUltimaPublicacion: null, ultimaSincronizacion: null,
+        });
+      }
+      const d = porDespacho.get(key);
+      d.procesos++;
+      if (p.fecha_ultima_actuacion && (!d.fechaUltimaPublicacion || p.fecha_ultima_actuacion > d.fechaUltimaPublicacion)) d.fechaUltimaPublicacion = p.fecha_ultima_actuacion;
+      if (p.ultimo_check_en && (!d.ultimaSincronizacion || p.ultimo_check_en > d.ultimaSincronizacion)) d.ultimaSincronizacion = p.ultimo_check_en;
+    }
+    return [...porDespacho.values()].sort((a, b) => b.procesos - a.procesos);
+  },
+
+  // --- Analítica para el dashboard de Inicio ---
+  async analitica() {
+    if (!HAS_DB) return null;
+    const { data: rows } = await db.from('procesos')
+      .select('jurisdiccion, tipo_proceso, fecha_ultima_actuacion, abogado_id, creado_en, estado');
+    const lista = rows || [];
+    const hoy = new Date();
+    const meses = (a, b) => (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
+    const antiguedad = { m0_6: 0, m6_12: 0, mas12: 0, sin: 0 };
+    for (const p of lista) {
+      if (!p.fecha_ultima_actuacion) { antiguedad.sin++; continue; }
+      const m = meses(hoy, new Date(p.fecha_ultima_actuacion));
+      if (m <= 6) antiguedad.m0_6++; else if (m <= 12) antiguedad.m6_12++; else antiguedad.mas12++;
+    }
+    const contarPor = campo => {
+      const mapa = {};
+      for (const p of lista) { const k = p[campo] || 'Sin clasificar'; mapa[k] = (mapa[k] || 0) + 1; }
+      return Object.entries(mapa).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([nombre, total]) => ({ nombre, total }));
+    };
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString();
+    const procesosNuevosEsteMes = lista.filter(p => p.creado_en >= inicioMes).length;
+    const { count: actuacionesEsteMes } = await db.from('actuaciones').select('*', { count: 'exact', head: true }).gte('creado_en', inicioMes);
+    const porAdoptar = lista.filter(p => !p.abogado_id && p.estado === 'activo').length;
+    return {
+      antiguedad, porJurisdiccion: contarPor('jurisdiccion'), porEspecialidad: contarPor('tipo_proceso'),
+      procesosNuevosEsteMes, actuacionesEsteMes: actuacionesEsteMes || 0, porAdoptar,
+    };
+  },
 };
 
 // ---------------------------------------------------------------------
@@ -238,16 +326,24 @@ const server = createServer(async (req, res) => {
     if (path.startsWith('/api/')) {
       if (!HAS_DB && req.method !== 'GET') return json(res, 403, { error: 'CRUD deshabilitado en modo demostración. Conecta Supabase.' });
       const m = path.match(/^\/api\/procesos\/(.+)$/);
+      const mc = path.match(/^\/api\/clientes\/(.+)$/);
       if (path === '/api/stats') return json(res, 200, await data.stats());
+      if (path === '/api/analitica') return json(res, 200, await data.analitica());
       if (path === '/api/rastreo-actual') return json(res, 200, await data.rastreoActual());
       if (path === '/api/procesos' && req.method === 'GET') return json(res, 200, await data.procesos(url.searchParams.get('q') || '', url.searchParams.get('sort') || ''));
       if (path === '/api/procesos' && req.method === 'POST') return json(res, 200, await data.crearProceso(await body(req)));
+      if (path === '/api/procesos/ingest' && req.method === 'POST') return json(res, 200, await data.ingestarProcesos(await body(req)));
       if (m && req.method === 'PUT') return json(res, 200, await data.editarProceso(m[1], await body(req)));
       if (m && req.method === 'DELETE') return json(res, 200, await data.borrarProceso(m[1]));
       if (path === '/api/cambios') return json(res, 200, await data.cambios());
       if (path === '/api/notificaciones') return json(res, 200, await data.notificaciones());
       if (path === '/api/vencimientos') return json(res, 200, await data.vencimientos());
       if (path === '/api/plantillas') return json(res, 200, await data.plantillas());
+      if (path === '/api/despachos') return json(res, 200, await data.despachos());
+      if (path === '/api/clientes' && req.method === 'GET') return json(res, 200, await data.clientes(url.searchParams.get('q') || '', url.searchParams.get('tipo') || ''));
+      if (path === '/api/clientes' && req.method === 'POST') return json(res, 200, await data.crearCliente(await body(req)));
+      if (mc && req.method === 'PUT') return json(res, 200, await data.editarCliente(mc[1], await body(req)));
+      if (mc && req.method === 'DELETE') return json(res, 200, await data.borrarCliente(mc[1]));
       if (path === '/api/consulta-viva') return json(res, 200, await data.consultaViva(url.searchParams.get('q') || ''));
       return json(res, 404, { error: 'no encontrado' });
     }

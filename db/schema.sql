@@ -41,6 +41,18 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  -- De dónde viene el proceso: solo 'rama_judicial' tiene rastreo automático por API;
+  -- 'superfinanciera', 'sic' y 'siugj' no tienen API pública, se hace seguimiento manual.
+  -- siugj = Sistema Integrado de Gestión Judicial (juzgados que migraron a expediente
+  -- electrónico, sobre todo laborales) — es un portal distinto al CPNU nacional.
+  create type fuente_proceso as enum ('rama_judicial', 'superfinanciera', 'sic', 'siugj');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type tipo_cliente as enum ('persona', 'empresa');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   create type estado_notificacion as enum ('pendiente', 'enviada', 'fallida');
 exception when duplicate_object then null; end $$;
 
@@ -66,6 +78,7 @@ on conflict (clave) do nothing;
 create table if not exists clientes (
   id          uuid primary key default gen_random_uuid(),
   nombre      text not null,
+  tipo        tipo_cliente not null default 'persona',
   documento   text,
   telefono    text,
   whatsapp    text,             -- E.164, opcional (se llena con el tiempo)
@@ -97,13 +110,15 @@ create table if not exists procesos (
   tipo_id            tipo_id_proceso not null default 'otro',
   origen_id_raw      text,                        -- el ID tal cual venía en el Sheet (trazabilidad)
   api_trackable      boolean not null default false, -- true si se puede rastrear por el API CPNU
+  fuente             fuente_proceso not null default 'rama_judicial', -- rama_judicial | superfinanciera | sic
+  jurisdiccion       text,                        -- Ordinaria, Contencioso Adm., Constitucional, etc.
 
   -- Partes
   cliente_id         uuid references clientes(id) on delete set null,
   abogado_id         uuid references abogados(id) on delete set null, -- asignación (reparto)
   demandante         text,
   demandado          text,
-  tipo_proceso       text,
+  tipo_proceso       text,                        -- usado como "especialidad" (Civil, Laboral, ...)
 
   -- Ubicación / despacho
   despacho           text,
