@@ -192,8 +192,9 @@ create index if not exists idx_audiencias_fecha on audiencias (fecha);
 -- ---------------------------------------------------------------------
 create table if not exists alertas (
   id            uuid primary key default gen_random_uuid(),
-  proceso_id    uuid not null references procesos(id) on delete cascade,
+  proceso_id    uuid references procesos(id) on delete cascade,       -- nulo si es de una audiencia sin proceso enlazado
   actuacion_id  uuid references actuaciones(id) on delete set null,
+  audiencia_id  uuid references audiencias(id) on delete cascade,     -- para tipo='audiencia_proxima'/'vencimiento_termino'
   tipo          tipo_alerta not null,
   titulo        text,
   detalle       text,
@@ -201,6 +202,7 @@ create table if not exists alertas (
   creado_en     timestamptz not null default now()
 );
 create index if not exists idx_alertas_estado on alertas (estado, creado_en);
+create index if not exists idx_alertas_audiencia on alertas (audiencia_id);
 
 create table if not exists notificaciones (
   id                uuid primary key default gen_random_uuid(),

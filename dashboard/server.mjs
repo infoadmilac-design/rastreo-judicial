@@ -145,7 +145,9 @@ const data = {
   async vencimientos() {
     if (!HAS_DB) { const d = await cargarDemo(); return d.audiencias.filter(a => a.fecha).sort((x, y) => (x.fecha || '').localeCompare(y.fecha)); }
     const { data: rows } = await db.from('audiencias').select('id, fecha, hora, descripcion, lugar, clientes(nombre)').order('fecha').limit(200);
-    return (rows || []).map(a => ({ ...a, cliente: a.clientes?.nombre }));
+    const { data: alertas } = await db.from('alertas').select('audiencia_id, estado').not('audiencia_id', 'is', null);
+    const estadoPorAudiencia = new Map((alertas || []).map(a => [a.audiencia_id, a.estado]));
+    return (rows || []).map(a => ({ ...a, cliente: a.clientes?.nombre, recordatorio: estadoPorAudiencia.get(a.id) || null }));
   },
 
   async plantillas() {

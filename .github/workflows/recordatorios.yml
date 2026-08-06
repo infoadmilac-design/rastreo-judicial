@@ -1,0 +1,40 @@
+name: Recordatorios de audiencias y vencimientos
+
+# Corre una vez al día (hora Colombia = UTC-5): 12:30 UTC = 7:30 a.m.
+on:
+  schedule:
+    - cron: '30 12 * * *'
+  workflow_dispatch:        # permite correrlo a mano desde la pestaña Actions
+
+jobs:
+  recordar-y-notificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      EMAIL_CENTRAL: ${{ secrets.EMAIL_CENTRAL }}
+      WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+      WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+      WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
+      WHATSAPP_LANG: ${{ secrets.WHATSAPP_LANG }}
+      WHATSAPP_CENTRAL: ${{ secrets.WHATSAPP_CENTRAL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependencias
+        run: |
+          cd worker && npm install --no-audit --no-fund
+          cd ../notify && npm install --no-audit --no-fund
+
+      - name: Crear recordatorios de audiencias/vencimientos próximos
+        run: cd worker && node recordatorios.mjs
+
+      - name: Notificar recordatorios (correo + WhatsApp)
+        continue-on-error: true
+        run: cd notify && node notificar.mjs

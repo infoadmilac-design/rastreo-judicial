@@ -351,6 +351,7 @@ const resaltarVars=t=>esc(t).replace(/\{\{(\w+)\}\}/g,'<span class="var">{{$1}}<
 const empty=(ico,titulo,sub)=>`<div class="empty"><div class="big">${ico}</div><b>${esc(titulo)}</b>${sub?`<div class="sub" style="margin-top:6px">${esc(sub)}</div>`:''}</div>`;
 const emptyMini=(ico,titulo,sub)=>`<div class="empty" style="padding:26px 16px"><div class="big" style="font-size:26px">${ico}</div><b>${esc(titulo)}</b>${sub?`<div class="sub" style="margin-top:4px">${esc(sub)}</div>`:''}</div>`;
 const tablaMini=filas=>`<table>${filas.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+const badgeRecordatorio=r=>r==='notificada'?'<span class="tag si">🔔 Enviado</span>':(r==='pendiente'?'<span class="tag no">🔔 Programado</span>':'<span class="sub">—</span>');
 
 let STATS={};
 async function cargarStats(){
@@ -444,9 +445,9 @@ const vistas={
     const rows=await api('/vencimientos'); const hoy=new Date().toISOString().slice(0,10);
     const color=f=>{if(!f)return['',''];const dd=Math.round((new Date(f)-new Date(hoy))/864e5);
       if(dd<0)return['arch','vencida'];if(dd<=3)return['pend',dd===0?'hoy':`en ${dd} día(s)`];if(dd<=15)return['act',`en ${dd} días`];return['si',`en ${dd} días`];};
-    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Cuándo</th><th>Descripción</th><th>Cliente</th><th>Lugar</th></tr></thead><tbody>${rows.map(a=>{const[c,l]=color(a.fecha);return`<tr>
+    content.innerHTML=rows.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Cuándo</th><th>Descripción</th><th>Cliente</th><th>Lugar</th><th>Recordatorio</th></tr></thead><tbody>${rows.map(a=>{const[c,l]=color(a.fecha);return`<tr>
       <td><b>${fdate(a.fecha)}</b><div class="sub">${esc(a.hora||'')}</div></td><td><span class="tag ${c}">${l}</span></td>
-      <td>${esc(a.descripcion||'')}</td><td>${esc(a.cliente||'')}</td><td>${esc(a.lugar||'')}</td></tr>`;}).join('')}</tbody></table></div>`
+      <td>${esc(a.descripcion||'')}</td><td>${esc(a.cliente||'')}</td><td>${esc(a.lugar||'')}</td><td>${badgeRecordatorio(a.recordatorio)}</td></tr>`;}).join('')}</tbody></table></div>`
       : empty('📅','Sin audiencias registradas','');
   },
 
@@ -708,8 +709,8 @@ async function pintarCalendario(){
   if(calVista==='agenda'){
     const ymPrefix=`${anio}-${String(mes+1).padStart(2,'0')}`;
     const delMes=rows.filter(a=>(a.fecha||'').startsWith(ymPrefix)).sort((x,y)=>(x.fecha||'').localeCompare(y.fecha));
-    $('#cal-body').innerHTML=delMes.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Descripción</th><th>Lugar</th></tr></thead>
-      <tbody>${delMes.map(a=>`<tr><td><b>${fdate(a.fecha)}</b></td><td>${esc(a.hora||'')}</td><td>${esc(a.cliente||'')}</td><td>${esc(a.descripcion||'')}</td><td>${esc(a.lugar||'')}</td></tr>`).join('')}</tbody></table></div>`
+    $('#cal-body').innerHTML=delMes.length?`<div class="tablewrap"><table><thead><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Descripción</th><th>Lugar</th><th>Recordatorio</th></tr></thead>
+      <tbody>${delMes.map(a=>`<tr><td><b>${fdate(a.fecha)}</b></td><td>${esc(a.hora||'')}</td><td>${esc(a.cliente||'')}</td><td>${esc(a.descripcion||'')}</td><td>${esc(a.lugar||'')}</td><td>${badgeRecordatorio(a.recordatorio)}</td></tr>`).join('')}</tbody></table></div>`
       : empty('📭','Sin eventos este mes','');
     return;
   }
@@ -723,7 +724,7 @@ async function pintarCalendario(){
     const evs=porDia[f]||[];
     celdas.push(`<div style="min-height:88px;background:#fff;border:1px solid var(--line);padding:6px;font-size:12px${f===hoyStr?';box-shadow:inset 0 0 0 2px var(--navy)':''}">
       <div style="font-weight:600;margin-bottom:3px">${d}</div>
-      ${evs.slice(0,3).map(e=>`<div class="tag act" style="display:block;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.descripcion||e.cliente||'')}">${esc(e.hora||'')} ${esc(e.cliente||e.descripcion||'')}</div>`).join('')}
+      ${evs.slice(0,3).map(e=>`<div class="tag act" style="display:block;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(e.descripcion||e.cliente||'')}">${e.recordatorio?'🔔':''} ${esc(e.hora||'')} ${esc(e.cliente||e.descripcion||'')}</div>`).join('')}
       ${evs.length>3?`<div class="sub">+${evs.length-3} más</div>`:''}
     </div>`);
   }
@@ -787,9 +788,12 @@ $('#gsearch').oninput=e=>{busq=e.target.value;clearTimeout(window._t);window._t=
   await cargarStats();
   const params=new URLSearchParams(location.search);
   const radDeep=params.get('radicado');
+  const irDeep=params.get('ir');
   if(radDeep && MODO==='real'){
     ir('procesos');
     try{await verPorRad(radDeep);}catch{}
+  } else if(irDeep && titulos[irDeep]){
+    ir(irDeep);
   } else {
     vistas.inicio();
   }

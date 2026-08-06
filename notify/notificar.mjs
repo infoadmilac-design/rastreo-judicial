@@ -58,7 +58,10 @@ async function correrProduccion() {
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://rastreo-judicial.onrender.com';
   const { data: alertas, error } = await db
     .from('alertas')
-    .select('id, tipo, detalle, proceso_id, actuacion_id, procesos(radicado, despacho, clientes(nombre)), actuaciones(fecha_actuacion, tipo, anotacion, con_documentos)')
+    .select(`id, tipo, detalle, proceso_id, actuacion_id, audiencia_id,
+      procesos(radicado, despacho, clientes(nombre)),
+      actuaciones(fecha_actuacion, tipo, anotacion, con_documentos),
+      audiencias(fecha, hora, descripcion, lugar, clientes(nombre), procesos(radicado))`)
     .eq('estado', 'pendiente').order('creado_en', { ascending: true }).limit(LIMITE_SEGURIDAD + 1);
   if (error) throw error;
   if (!alertas.length) { console.log('No hay alertas pendientes.'); return; }
@@ -71,16 +74,22 @@ async function correrProduccion() {
   console.log(`Enviando ${alertas.length} alerta(s)…`);
   let enviadas = 0, fallidas = 0;
   for (const al of alertas) {
-    const p = al.procesos || {};
+    const esRecordatorio = !!al.audiencia_id;
+    const p = al.procesos || al.audiencias?.procesos || {};
     const act = al.actuaciones ? [al.actuaciones] : [];
     const primera = act[0] || {};
+    const aud = al.audiencias || {};
     let algunaOk = false;
 
     if (emailCentral) {
-      const { subject, html, text } = renderAlertaEmail({
-        radicado: p.radicado, cliente: p.clientes?.nombre, despacho: p.despacho,
-        actuaciones: act.map(a => ({ fechaActuacion: a.fecha_actuacion, tipo: a.tipo, anotacion: a.anotacion })),
-      });
+      const { subject, html, text } = esRecordatorio
+        ? { subject: al.titulo || 'Recordatorio de audiencia/vencimiento',
+            html: `<p><b>${al.titulo || ''}</b></p><p>${(al.detalle || '').replace(/\n/g, '<br>')}</p>`,
+            text: `${al.titulo || ''}\n${al.detalle || ''}` }
+        : renderAlertaEmail({
+            radicado: p.radicado, cliente: p.clientes?.nombre, despacho: p.despacho,
+            actuaciones: act.map(a => ({ fechaActuacion: a.fecha_actuacion, tipo: a.tipo, anotacion: a.anotacion })),
+          });
       const { data: notif } = await db.from('notificaciones').insert({
         alerta_id: al.id, canal: 'email', destinatario_tipo: 'centro',
         destinatario_valor: emailCentral, cuerpo: text, estado: 'pendiente',
@@ -91,29 +100,33 @@ async function correrProduccion() {
         algunaOk = true;
       } catch (e) {
         await db.from('notificaciones').update({ estado: 'fallida', error: e.message }).eq('id', notif.id);
-        console.log(`   ❌ [email] ${p.radicado}: ${e.message}`);
+        console.log(`   ❌ [email] ${p.radicado || al.titulo}: ${e.message}`);
       }
     }
 
     if (waCentral) {
-      const link = p.radicado ? `${dashboardUrl}/?radicado=${encodeURIComponent(p.radicado)}` : dashboardUrl;
-      const docs = primera.con_documentos ? ' 📎 Con documentos para descargar.' : '';
-      const resumen = `${primera.tipo || 'Novedad'} (${primera.fecha_actuacion || 'sin fecha'}).${docs} Ver detalle: ${link}`;
-      const cuerpo = `${p.radicado} · ${p.clientes?.nombre || 'sin cliente'} · ${resumen}`;
+      const link = p.radicado ? `${dashboardUrl}/?radicado=${encodeURIComponent(p.radicado)}` : `${dashboardUrl}/?ir=calendario`;
+      let waParams;
+      if (esRecordatorio) {
+        waParams = ['🔔 Recordatorio', aud.clientes?.nombre || p.clientes?.nombre || 'sin cliente',
+          `${aud.descripcion || al.titulo || 'Evento'} el ${aud.fecha || ''} ${aud.hora || ''}.${aud.lugar ? ' ' + aud.lugar + '.' : ''} Ver calendario: ${link}`];
+      } else {
+        const docs = primera.con_documentos ? ' 📎 Con documentos para descargar.' : '';
+        const resumen = `${primera.tipo || 'Novedad'} (${primera.fecha_actuacion || 'sin fecha'}).${docs} Ver detalle: ${link}`;
+        waParams = [p.radicado || '—', p.clientes?.nombre || 'sin cliente', resumen];
+      }
+      const cuerpo = waParams.join(' · ');
       const { data: notif } = await db.from('notificaciones').insert({
         alerta_id: al.id, canal: 'whatsapp', destinatario_tipo: 'centro',
         destinatario_valor: waCentral, cuerpo, estado: 'pendiente',
       }).select('id').single();
       try {
-        const msgId = await enviarPlantilla({
-          to: waCentral,
-          params: [p.radicado || '—', p.clientes?.nombre || 'sin cliente', resumen],
-        });
+        const msgId = await enviarPlantilla({ to: waCentral, params: waParams });
         await db.from('notificaciones').update({ estado: 'enviada', proveedor_msg_id: msgId, enviada_en: new Date().toISOString() }).eq('id', notif.id);
         algunaOk = true;
       } catch (e) {
         await db.from('notificaciones').update({ estado: 'fallida', error: e.message }).eq('id', notif.id);
-        console.log(`   ❌ [whatsapp] ${p.radicado}: ${e.message}`);
+        console.log(`   ❌ [whatsapp] ${p.radicado || al.titulo}: ${e.message}`);
       }
     }
 
