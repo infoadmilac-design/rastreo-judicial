@@ -118,9 +118,22 @@ const data = {
   async rastreoActual() {
     if (!HAS_DB) return null;
     const { data: run } = await db.from('rastreo_runs')
-      .select('id, estado, total, procesados, con_cambios, errores, proceso_actual, iniciado_en, actualizado_en, terminado_en')
+      .select('id, estado, total, procesados, con_cambios, errores, detalle_errores, proceso_actual, iniciado_en, actualizado_en, terminado_en')
       .order('iniciado_en', { ascending: false }).limit(1).maybeSingle();
     return run || null;
+  },
+
+  // --- Disparar una revisión manual desde el dashboard (workflow_dispatch de GitHub Actions) ---
+  async iniciarRevision() {
+    const token = process.env.GITHUB_TOKEN, repo = process.env.GITHUB_REPO;
+    if (!token || !repo) throw new Error('Falta configurar GITHUB_TOKEN / GITHUB_REPO en el servidor para poder iniciar la revisión desde aquí.');
+    const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/rastreo.yml/dispatches`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' }),
+    });
+    if (!r.ok) throw new Error(`GitHub respondió ${r.status}: ${await r.text()}`);
+    return { ok: true };
   },
 
   async cambios() {
@@ -349,6 +362,7 @@ const server = createServer(async (req, res) => {
       if (path === '/api/stats') return json(res, 200, await data.stats());
       if (path === '/api/analitica') return json(res, 200, await data.analitica());
       if (path === '/api/rastreo-actual') return json(res, 200, await data.rastreoActual());
+      if (path === '/api/iniciar-revision' && req.method === 'POST') return json(res, 200, await data.iniciarRevision());
       if (path === '/api/procesos' && req.method === 'GET') return json(res, 200, await data.procesos(url.searchParams.get('q') || '', url.searchParams.get('sort') || ''));
       if (path === '/api/procesos' && req.method === 'POST') return json(res, 200, await data.crearProceso(await body(req)));
       if (path === '/api/procesos/ingest' && req.method === 'POST') return json(res, 200, await data.ingestarProcesos(await body(req)));

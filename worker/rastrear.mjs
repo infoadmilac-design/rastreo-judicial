@@ -136,6 +136,8 @@ async function correrSupabase() {
     .update({ actualizado_en: new Date().toISOString(), ...extra }).eq('id', runId);
 
   let conCambios = 0, totalNuevas = 0, errores = 0;
+  const erroresDetalle = [];
+  const marcarError = (radicado, motivo) => { errores++; erroresDetalle.push({ radicado, motivo }); };
   try {
   for (let i = 0; i < procesos.length; i++) {
     const p = procesos[i];
@@ -150,7 +152,7 @@ async function correrSupabase() {
       const fechaGuardada = p.fecha_ultima_actuacion || null;
 
       const r = await revisarProceso({ radicado: p.radicado, idProceso: p.id_cpnu, consGuardada, fechaGuardada });
-      if (!r.ok) { errores++; continue; }
+      if (!r.ok) { marcarError(p.radicado, r.motivo || 'error desconocido'); continue; }
 
       if (r.nuevas?.length) {
         // Insertar actuaciones nuevas (idempotente por idRegActuacion)
@@ -163,7 +165,7 @@ async function correrSupabase() {
           .upsert(rows, { onConflict: 'id_reg_actuacion', ignoreDuplicates: true }).select('id, anotacion, fecha_actuacion');
         if (errIns) {
           console.log(`   ❌ ${p.radicado} error al guardar actuaciones: ${errIns.message}`);
-          errores++;
+          marcarError(p.radicado, 'guardar actuaciones: ' + errIns.message);
         } else if (ins?.length && !esPrimeraVez) {
           // Solo se alerta si YA había línea base (esto es un cambio real, no historia inicial)
           conCambios++; totalNuevas += ins.length;
@@ -180,8 +182,8 @@ async function correrSupabase() {
         ultima_actuacion_texto: r.nuevas?.[0]?.anotacion?.slice(0, 500) ?? undefined,
         ultimo_check_en: new Date().toISOString(),
       }).eq('id', p.id);
-    } catch (e) { console.log(`   ❌ ${p.radicado} ${e.message}`); errores++; }
-    await marcarProgreso({ procesados: i + 1, con_cambios: conCambios, errores });
+    } catch (e) { console.log(`   ❌ ${p.radicado} ${e.message}`); marcarError(p.radicado, e.message); }
+    await marcarProgreso({ procesados: i + 1, con_cambios: conCambios, errores, detalle_errores: erroresDetalle });
     await sleep(PAUSA_MS);
     // Mismo respiro de 3-5 min que en dry-run: evita el bloqueo 403 del servidor de la Rama
     if ((i + 1) % RESPIRO_CADA === 0 && i + 1 < procesos.length) {

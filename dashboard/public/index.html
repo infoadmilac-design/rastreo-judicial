@@ -276,7 +276,8 @@ async function pintarLive(){
         <h3>🩺 Estado de la revisión</h3>
         <div class="body">
           <div class="sub">Todavía no hay ninguna corrida registrada con el nuevo monitor de progreso.
-          La revisión automática corre 2 veces al día (6:00 a.m. y 5:00 p.m. hora Colombia); en cuanto empiece la próxima, este panel se va a actualizar solo mostrando el avance en vivo.</div>
+          La revisión automática corre 2 veces al día (7:00 a.m. y 3:30 p.m. hora Colombia); en cuanto empiece la próxima, este panel se va a actualizar solo mostrando el avance en vivo.</div>
+          <div style="margin-top:10px">${MODO==='real'?'<button class="btn" id="btn-iniciar-rev" onclick="iniciarRevisionManual()">▶️ Iniciar revisión</button>':''}</div>
         </div>
       </div>`;
     clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,30000);
@@ -311,9 +312,28 @@ async function pintarLive(){
           <div class="sub" style="margin-top:2px">Iniciada ${fdatetime(r.iniciado_en)} (hace ${fmtDur(Date.now()-new Date(r.iniciado_en).getTime())})</div>
         </div>
       </div>
+      ${MODO==='real'?`<div style="padding:0 16px 16px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sec" id="btn-iniciar-rev" onclick="iniciarRevisionManual()" ${corriendo?'disabled':''}>▶️ Iniciar revisión</button>
+        ${(r.errores||0)>0?`<button class="btn ghost" onclick="toggleErrores()">⚠️ Ver errores (${r.errores})</button>`:''}
+      </div>
+      ${(r.errores||0)>0?`<div id="panel-errores" class="hide" style="padding:0 16px 16px">
+        <div class="tablewrap"><table><thead><tr><th>Radicado</th><th>Motivo</th></tr></thead>
+        <tbody>${(r.detalle_errores||[]).map(e=>`<tr><td class="radbtn">${esc(e.radicado||'—')}</td><td>${esc(e.motivo||'')}</td></tr>`).join('')||'<tr><td colspan="2" class="sub">Sin detalle disponible para esta corrida.</td></tr>'}</tbody></table></div>
+      </div>`:''}`:''}
     </div>`;
   clearTimeout(liveTimer);liveTimer=setTimeout(pintarLive,corriendo?5000:30000);
 }
+window.toggleErrores=()=>{const p=document.getElementById('panel-errores');if(p)p.classList.toggle('hide');};
+window.iniciarRevisionManual=async()=>{
+  const btn=document.getElementById('btn-iniciar-rev');
+  if(!confirm('¿Iniciar la revisión ahora? Puede tardar más de 1 hora en completarse.'))return;
+  if(btn){btn.disabled=true;btn.textContent='Iniciando…';}
+  try{
+    await api('/iniciar-revision',{method:'POST'});
+    toast('Revisión iniciada ✓ (puede tardar unos minutos en aparecer aquí)');
+    setTimeout(pintarLive,8000);
+  }catch(e){alert('No se pudo iniciar: '+e.message);if(btn){btn.disabled=false;btn.textContent='▶️ Iniciar revisión';}}
+};
 async function pintarAnalitica(){
   const el=document.getElementById('ini-analitica');
   if(!el)return;

@@ -264,6 +264,7 @@ create table if not exists rastreo_runs (
   procesados     integer not null default 0,
   con_cambios    integer not null default 0,
   errores        integer not null default 0,
+  detalle_errores jsonb not null default '[]'::jsonb,  -- [{radicado, motivo}, ...]
   proceso_actual text,                 -- radicado que se está consultando ahora mismo
   iniciado_en    timestamptz not null default now(),
   actualizado_en timestamptz not null default now(),
