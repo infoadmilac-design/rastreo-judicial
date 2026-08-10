@@ -1,15 +1,17 @@
 name: Recordatorios de audiencias y vencimientos
 
-# Corre una vez al día (hora Colombia = UTC-5): 12:30 UTC = 7:30 a.m.
+# Corre cada 30 min: el recordatorio "1 día antes" se agrupa en un solo mensaje
+# diario (no importa que este workflow corra seguido), pero el de "1 hora antes"
+# sí necesita chequeos frecuentes para caer dentro de su ventana de 45-75 min.
 on:
   schedule:
-    - cron: '30 12 * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch:        # permite correrlo a mano desde la pestaña Actions
 
 jobs:
   recordar-y-notificar:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

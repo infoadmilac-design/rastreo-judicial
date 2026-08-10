@@ -54,6 +54,10 @@ async function correrProduccion() {
   // corrida duplicada aparecen cientos de alertas de golpe, no se manda un
   // bombardeo de WhatsApp/correo — se manda un aviso de que hay que revisar
   // a mano en vez de saturar al número central (ver LIMITE_SEGURIDAD abajo).
+  // Tope de seguridad: si por algún bug o corrida duplicada aparecen cientos de
+  // alertas INDIVIDUALES de golpe, no se manda un bombardeo de WhatsApp/correo —
+  // se manda un aviso de que hay que revisar a mano. Los recordatorios "1 día
+  // antes" no cuentan aquí porque siempre se agrupan en un solo mensaje diario.
   const LIMITE_SEGURIDAD = 30;
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://rastreo-judicial.onrender.com';
   const { data: alertas, error } = await db
@@ -62,18 +66,26 @@ async function correrProduccion() {
       procesos(radicado, despacho, clientes(nombre)),
       actuaciones(fecha_actuacion, tipo, anotacion, con_documentos),
       audiencias(fecha, hora, descripcion, lugar, clientes(nombre), procesos(radicado))`)
-    .eq('estado', 'pendiente').order('creado_en', { ascending: true }).limit(LIMITE_SEGURIDAD + 1);
+    .eq('estado', 'pendiente').order('creado_en', { ascending: true }).limit(200);
   if (error) throw error;
   if (!alertas.length) { console.log('No hay alertas pendientes.'); return; }
-  if (alertas.length > LIMITE_SEGURIDAD) {
-    console.error(`⚠️  Hay más de ${LIMITE_SEGURIDAD} alertas pendientes de golpe (posible corrida duplicada u otro problema). ` +
+
+  // Los recordatorios "1 día antes" se agrupan en un solo mensaje diario para no
+  // saturar WhatsApp cuando hay varias audiencias/vencimientos el mismo día. Los
+  // cambios reales de proceso y los "1 hora antes" (puntuales) se mandan uno a uno.
+  const esDiaAntes = al => al.audiencia_id && al.titulo?.startsWith('[1 día antes]');
+  const diaAntes = alertas.filter(esDiaAntes);
+  const individuales = alertas.filter(al => !esDiaAntes(al));
+
+  if (individuales.length > LIMITE_SEGURIDAD) {
+    console.error(`⚠️  Hay más de ${LIMITE_SEGURIDAD} alertas individuales pendientes de golpe (posible corrida duplicada u otro problema). ` +
       `No se envía nada por WhatsApp/correo para evitar un bombardeo — revisa la tabla "alertas" en Supabase antes de continuar.`);
     process.exit(1);
   }
 
-  console.log(`Enviando ${alertas.length} alerta(s)…`);
+  console.log(`Enviando ${individuales.length} alerta(s) individual(es)${diaAntes.length ? ` + 1 resumen diario (${diaAntes.length} evento(s))` : ''}…`);
   let enviadas = 0, fallidas = 0;
-  for (const al of alertas) {
+  for (const al of individuales) {
     const esRecordatorio = !!al.audiencia_id;
     const p = al.procesos || al.audiencias?.procesos || {};
     const act = al.actuaciones ? [al.actuaciones] : [];
@@ -133,6 +145,31 @@ async function correrProduccion() {
     if (algunaOk) { await db.from('alertas').update({ estado: 'notificada' }).eq('id', al.id); enviadas++; }
     else fallidas++;
   }
+
+  // ---- Resumen diario único de recordatorios "1 día antes" ----
+  if (diaAntes.length && waCentral) {
+    const items = diaAntes.map(al => {
+      const aud = al.audiencias || {};
+      const p = al.procesos || aud.procesos || {};
+      return `${aud.hora || '—'} ${aud.descripcion || al.titulo}${aud.clientes?.nombre ? ' · ' + aud.clientes.nombre : ''}${p.radicado ? ' · ' + p.radicado : ''}`.slice(0, 120);
+    });
+    const link = `${dashboardUrl}/?ir=calendario`;
+    const waParams = ['📅 Resumen del día siguiente', `${diaAntes.length} evento(s) programado(s) para mañana`,
+      `${items.join(' | ')} · Ver calendario: ${link}`];
+    let msgId = null, err = null;
+    try { msgId = await enviarPlantilla({ to: waCentral, params: waParams }); }
+    catch (e) { err = e.message; console.log(`   ❌ [whatsapp resumen diario] ${e.message}`); }
+    for (const al of diaAntes) {
+      await db.from('notificaciones').insert({
+        alerta_id: al.id, canal: 'whatsapp', destinatario_tipo: 'centro', destinatario_valor: waCentral,
+        cuerpo: waParams.join(' · '), estado: err ? 'fallida' : 'enviada',
+        proveedor_msg_id: msgId, error: err, enviada_en: err ? null : new Date().toISOString(),
+      });
+      if (!err) { await db.from('alertas').update({ estado: 'notificada' }).eq('id', al.id); enviadas++; }
+      else fallidas++;
+    }
+  }
+
   console.log(`\n===== RESUMEN =====\nEnviadas: ${enviadas}  Fallidas: ${fallidas}`);
 }
 

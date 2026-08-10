@@ -242,6 +242,24 @@
   </div>
 </dialog>
 
+<!-- Dialog Nuevo evento (calendario) -->
+<dialog id="dlgEvento">
+  <div class="dlg-h">🗓️ Nuevo evento</div>
+  <div class="dlg-b">
+    <div class="row2">
+      <div><label>Fecha</label><input type="date" id="fe_fecha"></div>
+      <div><label>Hora</label><input type="time" id="fe_hora"></div>
+    </div>
+    <div><label>Descripción</label><input id="fe_descripcion" placeholder="Audiencia, vencimiento de término, etc."></div>
+    <div><label>Lugar</label><input id="fe_lugar" placeholder="Oficina, juzgado, virtual…"></div>
+    <div><label>Radicado (opcional, para enlazar el proceso/cliente)</label><input id="fe_radicado" placeholder="25000234200020180182301"></div>
+  </div>
+  <div class="dlg-f">
+    <button class="btn sec" onclick="dlgEvento.close()">Cancelar</button>
+    <button class="btn" id="fe_btn">Guardar</button>
+  </div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -532,6 +550,7 @@ const vistas={
           <button class="chip ${calVista==='mes'?'on':''}" onclick="setCalVista('mes')">Mes</button>
           <button class="chip ${calVista==='agenda'?'on':''}" onclick="setCalVista('agenda')">Agenda</button>
         </div>
+        ${MODO==='real'?'<button class="btn" onclick="abrirNuevoEvento()">＋ Agregar evento</button>':''}
       </div>
       <div id="cal-body"></div>`;
     pintarCalendario();
@@ -711,6 +730,23 @@ $('#fi_btn').onclick=async()=>{
     const r=await api('/procesos/ingest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fuente:$('#fi_fuente').value,radicados})});
     dlgIngest.close();toast(`${r.creados} proceso(s) cargado(s)${r.omitidos?` · ${r.omitidos} ya existían`:''}`);
     pintarProcesos();cargarStats();
+  }catch(e){alert('Error: '+e.message);}
+};
+
+window.abrirNuevoEvento=()=>{
+  ['fe_fecha','fe_hora','fe_descripcion','fe_lugar','fe_radicado'].forEach(k=>$('#'+k).value='');
+  dlgEvento.showModal();
+};
+$('#fe_btn').onclick=async()=>{
+  const fecha=$('#fe_fecha').value;
+  if(!fecha){alert('Elige una fecha');return;}
+  try{
+    await api('/audiencias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      fecha, hora:$('#fe_hora').value||null, descripcion:$('#fe_descripcion').value.trim()||null,
+      lugar:$('#fe_lugar').value.trim()||null, radicado:$('#fe_radicado').value.trim()||null,
+    })});
+    dlgEvento.close();toast('Evento agregado ✓');
+    pintarCalendario();cargarStats();
   }catch(e){alert('Error: '+e.message);}
 };
 

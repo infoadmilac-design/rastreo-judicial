@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
 import { consultarPorRadicado, consultarPorNombre, obtenerActuaciones } from '../worker/cpnu.mjs';
+import { detectarEvento } from '../worker/detectar-eventos.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -163,6 +164,22 @@ const data = {
     return (rows || []).map(a => ({ ...a, cliente: a.clientes?.nombre, recordatorio: estadoPorAudiencia.get(a.id) || null }));
   },
 
+  // --- Eventos de calendario (audiencias/vencimientos) ---
+  async crearAudiencia({ fecha, hora, descripcion, lugar, radicado }) {
+    if (!fecha) throw new Error('Falta la fecha del evento');
+    let proceso_id = null, cliente_id = null;
+    if (radicado) {
+      const { data: proc } = await db.from('procesos').select('id, cliente_id').eq('radicado', radicado.trim()).maybeSingle();
+      if (proc) { proceso_id = proc.id; cliente_id = proc.cliente_id; }
+    }
+    const { data: r, error } = await db.from('audiencias')
+      .insert({ fecha, hora: hora || null, descripcion: descripcion || null, lugar: lugar || null, proceso_id, cliente_id })
+      .select().single();
+    if (error) throw error;
+    return r;
+  },
+  async borrarAudiencia(id) { const { error } = await db.from('audiencias').delete().eq('id', id); if (error) throw error; return { ok: true }; },
+
   async plantillas() {
     if (!HAS_DB) { const d = await cargarDemo(); return d.plantillas; }
     const { data: rows } = await db.from('plantillas').select('*').eq('activa', true).order('nombre');
@@ -183,7 +200,7 @@ const data = {
       let enBaseLocal = false, revision = null, clienteLocal = null;
       if (HAS_DB) {
         const { data: proc } = await db.from('procesos')
-          .select('id, clientes(nombre)').eq('radicado', q).maybeSingle();
+          .select('id, cliente_id, clientes(nombre)').eq('radicado', q).maybeSingle();
         if (proc) {
           enBaseLocal = true;
           clienteLocal = proc.clientes?.nombre || null;
@@ -203,7 +220,7 @@ const data = {
             }));
             const { data: ins, error: errIns } = await db.from('actuaciones')
               .upsert(rows, { onConflict: 'id_reg_actuacion', ignoreDuplicates: true })
-              .select('id, anotacion, fecha_actuacion');
+              .select('id, anotacion, fecha_actuacion, tipo');
             if (errIns) {
               throw new Error('No se pudo guardar la revisión: ' + errIns.message);
             }
@@ -213,6 +230,14 @@ const data = {
                 proceso_id: proc.id, actuacion_id: a.id, tipo: 'nueva_actuacion',
                 titulo: `Nueva actuación en ${q}`, detalle: a.anotacion?.slice(0, 500), estado: 'pendiente',
               })));
+              for (const a of ins) {
+                const evento = detectarEvento({ tipo: a.tipo, anotacion: a.anotacion });
+                if (!evento) continue;
+                await db.from('audiencias').insert({
+                  proceso_id: proc.id, cliente_id: proc.cliente_id, fecha: evento.fecha, hora: evento.hora,
+                  descripcion: `⚠️ Detectado automáticamente — verificar: ${(a.anotacion || '').slice(0, 200)}`,
+                });
+              }
             }
           }
           await db.from('procesos').update({
@@ -371,6 +396,8 @@ const server = createServer(async (req, res) => {
       if (path === '/api/cambios') return json(res, 200, await data.cambios());
       if (path === '/api/notificaciones') return json(res, 200, await data.notificaciones());
       if (path === '/api/vencimientos') return json(res, 200, await data.vencimientos());
+      if (path === '/api/audiencias' && req.method === 'POST') return json(res, 200, await data.crearAudiencia(await body(req)));
+      { const ma = path.match(/^\/api\/audiencias\/(.+)$/); if (ma && req.method === 'DELETE') return json(res, 200, await data.borrarAudiencia(ma[1])); }
       if (path === '/api/plantillas') return json(res, 200, await data.plantillas());
       if (path === '/api/despachos') return json(res, 200, await data.despachos());
       if (path === '/api/clientes' && req.method === 'GET') return json(res, 200, await data.clientes(url.searchParams.get('q') || '', url.searchParams.get('tipo') || ''));

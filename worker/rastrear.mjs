@@ -13,6 +13,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { consultarPorRadicado, obtenerActuaciones, sleep } from './cpnu.mjs';
+import { detectarEvento } from './detectar-eventos.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -123,7 +124,7 @@ async function correrSupabase() {
   const db = createClient(url, key, { auth: { persistSession: false } });
 
   const { data: procesos, error } = await db
-    .from('procesos').select('id, radicado, id_cpnu, fecha_ultima_actuacion, hash_ultima_actuacion')
+    .from('procesos').select('id, radicado, id_cpnu, fecha_ultima_actuacion, hash_ultima_actuacion, cliente_id')
     .eq('api_trackable', true).not('radicado', 'is', null).limit(LIMIT === Infinity ? 5000 : LIMIT);
   if (error) throw error;
   console.log(`\n🔎 Rastreando ${procesos.length} procesos contra el API…\n`);
@@ -162,7 +163,7 @@ async function correrSupabase() {
           tipo: a.tipo, anotacion: a.anotacion, con_documentos: a.conDocumentos, es_nueva: !esPrimeraVez,
         }));
         const { data: ins, error: errIns } = await db.from('actuaciones')
-          .upsert(rows, { onConflict: 'id_reg_actuacion', ignoreDuplicates: true }).select('id, anotacion, fecha_actuacion');
+          .upsert(rows, { onConflict: 'id_reg_actuacion', ignoreDuplicates: true }).select('id, anotacion, fecha_actuacion, tipo');
         if (errIns) {
           console.log(`   ❌ ${p.radicado} error al guardar actuaciones: ${errIns.message}`);
           marcarError(p.radicado, 'guardar actuaciones: ' + errIns.message);
@@ -174,6 +175,18 @@ async function correrSupabase() {
             titulo: `Nueva actuación en ${p.radicado}`, detalle: a.anotacion?.slice(0, 500), estado: 'pendiente',
           })));
           if (errAl) console.log(`   ❌ ${p.radicado} error al crear alerta: ${errAl.message}`);
+
+          // Si la actuación menciona una audiencia/diligencia con fecha clara, se agenda sola.
+          for (const a of ins) {
+            const evento = detectarEvento({ tipo: a.tipo, anotacion: a.anotacion });
+            if (!evento) continue;
+            const { error: errEv } = await db.from('audiencias').insert({
+              proceso_id: p.id, cliente_id: p.cliente_id, fecha: evento.fecha, hora: evento.hora,
+              descripcion: `⚠️ Detectado automáticamente — verificar: ${(a.anotacion || '').slice(0, 200)}`,
+            });
+            if (errEv) console.log(`   ❌ ${p.radicado} error al agendar evento: ${errEv.message}`);
+            else console.log(`   🗓️  ${p.radicado} evento detectado: ${evento.fecha} ${evento.hora || ''}`);
+          }
         }
       }
       // Actualizar cache del proceso

@@ -44,3 +44,7 @@ jobs:
         # tumbar el rastreo (que ya quedó guardado en Supabase).
         continue-on-error: true
         run: cd notify && node notificar.mjs
+
+      - name: Enviar informe de la corrida por WhatsApp
+        continue-on-error: true
+        run: cd worker && node resumen-corrida.mjs
