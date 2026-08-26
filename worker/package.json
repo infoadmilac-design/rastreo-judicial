@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.20.1"
   },
   "engines": {
     "node": ">=18"

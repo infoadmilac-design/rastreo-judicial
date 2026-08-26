@@ -381,6 +381,17 @@ const server = createServer(async (req, res) => {
   try {
     // API
     if (path.startsWith('/api/')) {
+      // Sirve el PDF de un informe (diario/semanal) — se referencia por enlace
+      // desde el WhatsApp, así que no pasa por json() sino que se sirve binario.
+      const mi = path.match(/^\/api\/informes\/([0-9a-f-]+)\.pdf$/);
+      if (mi) {
+        if (!HAS_DB) return json(res, 404, { error: 'no encontrado' });
+        const { data: row } = await db.from('informes').select('pdf_base64').eq('id', mi[1]).maybeSingle();
+        if (!row) return json(res, 404, { error: 'no encontrado' });
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="informe-${mi[1]}.pdf"` });
+        res.end(Buffer.from(row.pdf_base64, 'base64'));
+        return;
+      }
       if (!HAS_DB && req.method !== 'GET') return json(res, 403, { error: 'CRUD deshabilitado en modo demostración. Conecta Supabase.' });
       const m = path.match(/^\/api\/procesos\/(.+)$/);
       const mc = path.match(/^\/api\/clientes\/(.+)$/);

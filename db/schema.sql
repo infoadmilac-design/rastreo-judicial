@@ -289,6 +289,23 @@ create table if not exists estados_pp_vistos (
 create unique index if not exists uq_estados_pp_vistos on estados_pp_vistos (despacho_codigo, file_entry_id);
 
 -- ---------------------------------------------------------------------
+--  Informes en PDF (diario y semanal) generados por worker/informe.mjs.
+--  El PDF se guarda en base64 (evita los líos de PostgREST con bytea) y
+--  se sirve por /api/informes/:id.pdf para poder mandarlo como enlace
+--  por WhatsApp — la plantilla aprobada solo soporta texto, no adjuntos.
+-- ---------------------------------------------------------------------
+create table if not exists informes (
+  id           uuid primary key default gen_random_uuid(),
+  tipo         text not null check (tipo in ('diario', 'semanal')),
+  fecha_desde  date not null,
+  fecha_hasta  date not null,
+  pdf_base64   text not null,
+  resumen      jsonb not null default '{}'::jsonb,
+  creado_en    timestamptz not null default now()
+);
+create index if not exists idx_informes_creado on informes (creado_en desc);
+
+-- ---------------------------------------------------------------------
 --  Vistas útiles para el dashboard
 -- ---------------------------------------------------------------------
 -- Procesos con su última actuación y abogado asignado
