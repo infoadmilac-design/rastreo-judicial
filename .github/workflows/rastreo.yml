@@ -1,11 +1,11 @@
 name: Rastreo de procesos judiciales
 
 # Se ejecuta 2 veces al día (hora Colombia = UTC-5):
-#   12:00 UTC = 7:00 a.m.  ·  20:30 UTC = 3:30 p.m.
+#   15:00 UTC = 10:00 a.m.  ·  21:00 UTC = 4:00 p.m.
 on:
   schedule:
-    - cron: '0 12 * * *'
-    - cron: '30 20 * * *'
+    - cron: '0 15 * * *'
+    - cron: '0 21 * * *'
   workflow_dispatch:        # permite correrlo a mano desde la pestaña Actions o el dashboard
 
 jobs:
