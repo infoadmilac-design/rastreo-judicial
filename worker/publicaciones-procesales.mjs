@@ -54,16 +54,19 @@ async function listarPdfsEstado(idDespacho) {
   return parsePdfUrls(html);
 }
 
-// Cada "Notificación por Estado" trae un enlace directo a su PDF
-// ("LISTA ESTADO"). Se identifica de forma única por el fileEntryId que
-// va en la URL — no depende de parsear el título/fecha del listado (esos
-// campos, comprobado en pruebas, no siempre calzan con el PDF vecino).
+// Cada "Notificación por Estado" trae un enlace directo a su PDF. El texto
+// del enlace varía según el despacho ("LISTA ESTADO", "PDF ESTADO", etc.),
+// así que no se usa como referencia — solo importa la URL. El folder id
+// 20135 es el de los documentos de ayuda fijos de la página (instructivo,
+// video, ABC), igual en todos los despachos, así que se excluye. Cada
+// documento se identifica de forma única por su fileEntryId.
 function parsePdfUrls(html) {
-  const re = /href="(\/documents\/(\d+)\/(\d+)\/([^"/]+\.pdf)\/([^"]+))"\s*target=""\s*>\s*LISTA ESTADO/g;
+  const re = /href="(\/documents\/(\d+)\/(\d+)\/[^"]+\.pdf\/[^"]+)"/g;
   const out = new Map();
   let m;
   while ((m = re.exec(html))) {
-    const [, relUrl, , fileEntryId] = m;
+    const [, relUrl, folderId, fileEntryId] = m;
+    if (folderId === '20135') continue; // documentos de ayuda fijos, no boletines
     if (out.has(fileEntryId)) continue;
     out.set(fileEntryId, 'https://publicacionesprocesales.ramajudicial.gov.co' + relUrl);
   }
