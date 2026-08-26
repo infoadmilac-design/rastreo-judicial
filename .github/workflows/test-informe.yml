@@ -1,0 +1,28 @@
+name: TEST Informe diario/semanal (temporal)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+      WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+      WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
+      WHATSAPP_LANG: ${{ secrets.WHATSAPP_LANG }}
+      WHATSAPP_CENTRAL: ${{ secrets.WHATSAPP_CENTRAL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias
+        run: |
+          cd worker && npm install --no-audit --no-fund
+          cd ../notify && npm install --no-audit --no-fund
+      - name: Probar informe.mjs
+        run: cd worker && node informe.mjs
