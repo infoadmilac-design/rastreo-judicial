@@ -122,6 +122,20 @@ async function generarYEnviar(tipo, desde, hasta) {
   const link = `${dashboardUrl}/api/informes/${row.id}.pdf`;
   console.log(`Informe ${tipo} (${desde} a ${hasta}): ${resumen.conMovimiento} con movimiento, ${resumen.procesados} revisiones, ${resumen.errores} errores -> ${link}`);
 
+  // "Despertar" el dashboard antes de mandar el enlace: en el plan gratis de
+  // Render la instancia se duerme tras inactividad y la primera visita puede
+  // tardar ~50s o fallar en el navegador de WhatsApp si no espera. Si sigue
+  // sin responder tras el reintento, se manda el enlace de todos modos.
+  for (let intento = 1; intento <= 2; intento++) {
+    try {
+      const r = await fetch(link, { signal: AbortSignal.timeout(60000) });
+      if (r.ok) { console.log(`Dashboard despierto (intento ${intento}).`); break; }
+      console.log(`Aviso: el dashboard respondió ${r.status} al despertarlo (intento ${intento}).`);
+    } catch (e) {
+      console.log(`Aviso: no se pudo despertar el dashboard (intento ${intento}): ${e.message}`);
+    }
+  }
+
   if (!waCentral) { console.log('Falta WHATSAPP_CENTRAL — informe generado pero no enviado.'); return; }
   const encabezado = tipo === 'semanal' ? '📅 Informe semanal' : '📋 Informe diario';
   const linea2 = `${resumen.conMovimiento} proceso(s)/evento(s) con movimiento · ${resumen.procesados} revisión(es)`;
