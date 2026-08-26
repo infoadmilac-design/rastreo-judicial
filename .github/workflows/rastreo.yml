@@ -39,6 +39,12 @@ jobs:
       - name: Rastrear procesos (detecta actuaciones nuevas -> alertas)
         run: cd worker && node rastrear.mjs
 
+      - name: Revisar Publicaciones Procesales (Zipaquira/Cogua, no tienen API)
+        # continue-on-error: si el portal cambia de estructura o falla, no debe
+        # tumbar el resto de la corrida (que ya quedó guardada en Supabase).
+        continue-on-error: true
+        run: cd worker && node publicaciones-procesales.mjs
+
       - name: Notificar alertas pendientes (correo + WhatsApp)
         # continue-on-error: si falta configurar algún secreto, este paso no debe
         # tumbar el rastreo (que ya quedó guardado en Supabase).

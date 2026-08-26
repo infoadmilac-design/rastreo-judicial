@@ -273,6 +273,22 @@ create table if not exists rastreo_runs (
 create index if not exists idx_rastreo_runs_iniciado on rastreo_runs (iniciado_en desc);
 
 -- ---------------------------------------------------------------------
+--  Boletines de "Publicaciones Procesales" ya revisados (worker/
+--  publicaciones-procesales.mjs). Evita reprocesar el mismo PDF de
+--  "Notificación por Estado" en cada corrida — cada archivo se identifica
+--  por su fileEntryId único en el portal de la Rama Judicial.
+-- ---------------------------------------------------------------------
+create table if not exists estados_pp_vistos (
+  id               uuid primary key default gen_random_uuid(),
+  despacho_codigo  text not null,
+  file_entry_id    text not null,
+  fecha_publicacion date,
+  total_procesos   integer,
+  procesado_en     timestamptz not null default now()
+);
+create unique index if not exists uq_estados_pp_vistos on estados_pp_vistos (despacho_codigo, file_entry_id);
+
+-- ---------------------------------------------------------------------
 --  Vistas útiles para el dashboard
 -- ---------------------------------------------------------------------
 -- Procesos con su última actuación y abogado asignado
