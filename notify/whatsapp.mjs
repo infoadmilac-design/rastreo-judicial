@@ -49,6 +49,64 @@ export async function enviarPlantilla({ to, params = [] }) {
   return j.messages?.[0]?.id;   // id del mensaje enviado
 }
 
+// Sube un archivo a WhatsApp (queda alojado en los servidores de Meta, no
+// depende de que nuestro dashboard esté despierto) y devuelve su media id.
+export async function subirMedia({ buffer, filename, mimeType }) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  if (!token || !phoneId) throw new Error('Faltan WHATSAPP_TOKEN / WHATSAPP_PHONE_ID');
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mimeType);
+  form.append('file', new Blob([buffer], { type: mimeType }), filename);
+
+  const r = await fetch(`${API}/${phoneId}/media`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(`WhatsApp HTTP ${r.status} subiendo archivo: ${JSON.stringify(j.error || j)}`);
+  return j.id;   // media id
+}
+
+// Envía un mensaje de PLANTILLA con encabezado de documento (adjunto real,
+// no un enlace). `params` rellena el cuerpo {{1}}, {{2}}, ... igual que
+// enviarPlantilla; `mediaId` viene de subirMedia().
+export async function enviarPlantillaConDocumento({ to, mediaId, filename, params = [] }) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  // No es secreto (es solo el nombre de la plantilla aprobada en Meta), así
+  // que trae un default y no hace falta configurar un secret nuevo en CI.
+  const template = process.env.WHATSAPP_TEMPLATE_DOCUMENTO || 'informe_procesos';
+  const lang = process.env.WHATSAPP_LANG || 'es';
+  if (!token || !phoneId) throw new Error('Faltan WHATSAPP_TOKEN / WHATSAPP_PHONE_ID');
+
+  const body = {
+    messaging_product: 'whatsapp',
+    to: normalizarNumero(to),
+    type: 'template',
+    template: {
+      name: template,
+      language: { code: lang },
+      components: [
+        { type: 'header', parameters: [{ type: 'document', document: { id: mediaId, filename } }] },
+        ...(params.length ? [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: String(t).slice(0, 900) })) }] : []),
+      ],
+    },
+  };
+
+  const r = await fetch(`${API}/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(`WhatsApp HTTP ${r.status}: ${JSON.stringify(j.error || j)}`);
+  return j.messages?.[0]?.id;
+}
+
 // Envía texto libre (solo funciona dentro de la ventana de 24h tras un mensaje del usuario).
 export async function enviarTexto({ to, texto }) {
   const token = process.env.WHATSAPP_TOKEN;

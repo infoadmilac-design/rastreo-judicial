@@ -2,21 +2,26 @@
 //  informe.mjs · Informe diario (todos los días) y semanal (viernes)
 //  Junta los cambios de procesos del período (alertas: nueva_actuacion,
 //  audiencia_proxima, vencimiento_termino), arma un PDF, lo guarda en la
-//  tabla "informes" y manda un WhatsApp con el enlace para descargarlo
-//  (la plantilla aprobada de Meta solo soporta texto, no adjuntos —
-//  ver notas en README/INSTRUCCIONES sobre cómo pasar a PDF real).
+//  tabla "informes" (respaldo/consulta desde el dashboard) y lo manda por
+//  WhatsApp como ARCHIVO ADJUNTO real (plantilla "informe_procesos", con
+//  encabezado de documento) — el PDF se sube directo a WhatsApp, así que
+//  no depende de que el dashboard (Render, plan gratis) esté despierto.
+//
+//  Usa las mismas variables de entorno que notify/whatsapp.mjs (WHATSAPP_TOKEN,
+//  WHATSAPP_PHONE_ID, WHATSAPP_CENTRAL, WHATSAPP_LANG). El nombre de la
+//  plantilla con encabezado de documento tiene default "informe_procesos"
+//  (no hace falta configurar nada nuevo salvo que se cambie de nombre).
 //
 //  Uso:  node --env-file=.env informe.mjs
 // =====================================================================
 import { createClient } from '@supabase/supabase-js';
 import PDFDocument from 'pdfkit';
-import { enviarPlantilla } from '../notify/whatsapp.mjs';
+import { subirMedia, enviarPlantillaConDocumento } from '../notify/whatsapp.mjs';
 
 const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_KEY;
 if (!url || !key) { console.error('Falta SUPABASE_URL / SUPABASE_SERVICE_KEY'); process.exit(1); }
 const db = createClient(url, key, { auth: { persistSession: false } });
 const waCentral = process.env.WHATSAPP_CENTRAL;
-const dashboardUrl = process.env.DASHBOARD_URL || 'https://rastreo-judicial.onrender.com';
 
 // ---------- fechas en hora Colombia (UTC-5, sin horario de verano) ----------
 const hoyBogota = () =>
@@ -119,31 +124,24 @@ async function generarYEnviar(tipo, desde, hasta) {
     .select('id').single();
   if (error) throw error;
 
-  const link = `${dashboardUrl}/api/informes/${row.id}.pdf`;
-  console.log(`Informe ${tipo} (${desde} a ${hasta}): ${resumen.conMovimiento} con movimiento, ${resumen.procesados} revisiones, ${resumen.errores} errores -> ${link}`);
-
-  // "Despertar" el dashboard antes de mandar el enlace: en el plan gratis de
-  // Render la instancia se duerme tras inactividad y la primera visita puede
-  // tardar ~50s o fallar en el navegador de WhatsApp si no espera. Si sigue
-  // sin responder tras el reintento, se manda el enlace de todos modos.
-  for (let intento = 1; intento <= 2; intento++) {
-    try {
-      const r = await fetch(link, { signal: AbortSignal.timeout(60000) });
-      if (r.ok) { console.log(`Dashboard despierto (intento ${intento}).`); break; }
-      console.log(`Aviso: el dashboard respondió ${r.status} al despertarlo (intento ${intento}).`);
-    } catch (e) {
-      console.log(`Aviso: no se pudo despertar el dashboard (intento ${intento}): ${e.message}`);
-    }
-  }
+  console.log(`Informe ${tipo} (${desde} a ${hasta}): ${resumen.conMovimiento} con movimiento, ${resumen.procesados} revisiones, ${resumen.errores} errores (id ${row.id})`);
 
   if (!waCentral) { console.log('Falta WHATSAPP_CENTRAL — informe generado pero no enviado.'); return; }
-  const encabezado = tipo === 'semanal' ? '📅 Informe semanal' : '📋 Informe diario';
-  const linea2 = `${resumen.conMovimiento} proceso(s)/evento(s) con movimiento · ${resumen.procesados} revisión(es)`;
+
+  const rango = desde === hasta ? desde : `${desde} al ${hasta}`;
+  const filename = `informe-${tipo}-${desde}${desde === hasta ? '' : `-a-${hasta}`}.pdf`;
   try {
-    await enviarPlantilla({ to: waCentral, params: [encabezado, linea2, `Ver PDF: ${link}`] });
-    console.log(`✅ Informe ${tipo} enviado por WhatsApp.`);
+    // El archivo se sube directo a los servidores de WhatsApp/Meta — no
+    // depende de que nuestro dashboard (Render, plan gratis) esté despierto
+    // en el momento en que el usuario abre el mensaje.
+    const mediaId = await subirMedia({ buffer: pdfBuffer, filename, mimeType: 'application/pdf' });
+    await enviarPlantillaConDocumento({
+      to: waCentral, mediaId, filename,
+      params: [tipo === 'semanal' ? 'informe semanal' : 'informe diario', rango, String(resumen.conMovimiento), String(resumen.procesados)],
+    });
+    console.log(`✅ Informe ${tipo} enviado por WhatsApp como documento adjunto.`);
   } catch (e) {
-    console.error(`❌ No se pudo enviar el informe ${tipo}:`, e.message);
+    console.error(`❌ No se pudo enviar el informe ${tipo} como documento:`, e.message);
   }
 }
 
