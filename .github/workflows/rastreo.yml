@@ -1,19 +1,29 @@
 name: Rastreo de procesos judiciales
 
 # Se ejecuta 2 veces al día (hora Colombia = UTC-5):
-#   15:00 UTC = 10:00 a.m.  ·  21:00 UTC = 4:00 p.m.
+#   12:07 UTC = 7:07 a.m.  ·  17:37 UTC = 12:37 p.m.
+# Una corrida completa tarda ~2 h (hay ~200 procesos rastreables y se hacen pausas
+# para no bloquear el servidor de la Rama), así que la 2ª sale a mediodía para
+# terminar ~3 p. m. y que el informe diario de las 6:00 p. m. (informe.yml) incluya
+# todo lo del día. Los minutos "raros" (:07, :37) evitan la congestión de GitHub en
+# las horas en punto, donde los disparos llegaron a atrasarse varias horas.
 on:
   schedule:
-    - cron: '0 15 * * *'
-    - cron: '0 21 * * *'
+    - cron: '7 12 * * *'
+    - cron: '37 17 * * *'
   workflow_dispatch:        # permite correrlo a mano desde la pestaña Actions o el dashboard
+
+# Si una corrida se atrasa, la siguiente espera su turno en vez de correr encima.
+concurrency:
+  group: rastreo
+  cancel-in-progress: false
 
 jobs:
   rastrear-y-notificar:
     runs-on: ubuntu-latest
     # Con el ritmo seguro (pausas 3-5min para no bloquear el servidor de la Rama,
-    # ver docs/api-cpnu.md) 163 procesos pueden tardar 70+ min.
-    timeout-minutes: 150
+    # ver docs/api-cpnu.md) ~200 procesos tardan ~2 h.
+    timeout-minutes: 180
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
