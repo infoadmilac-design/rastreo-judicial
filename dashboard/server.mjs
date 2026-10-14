@@ -87,7 +87,7 @@ const data = {
         !s || (p.radicado || '').includes(s) || (p.cliente || '').toLowerCase().includes(s) ||
         (p.origen_id_raw || '').toLowerCase().includes(s)).slice(0, 500);
     }
-    let query = db.from('procesos').select('id, radicado, origen_id_raw, tipo_id, api_trackable, estado, sede, demandado, despacho, fecha_ultima_actuacion, ultima_actuacion_texto, ultimo_check_en, clientes(nombre), abogados(nombre)').limit(500);
+    let query = db.from('procesos').select('id, radicado, origen_id_raw, tipo_id, api_trackable, estado, sede, demandado, demandante, juzgado, despacho, fecha_ultima_actuacion, ultima_actuacion_texto, ultimo_check_en, clientes(nombre), abogados(nombre)').limit(500);
     if (q) {
       // Buscar también por nombre de cliente (no solo radicado/ID), uniendo por cliente_id
       const { data: clientesMatch } = await db.from('clientes').select('id').ilike('nombre', `%${q}%`).limit(200);
