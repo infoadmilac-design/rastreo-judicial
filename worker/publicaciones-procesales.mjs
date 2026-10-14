@@ -44,6 +44,16 @@ const DESPACHOS = [
   { codigo: '258993110002', juzgado: 'JUZGADO SEGUNDO FAMILIA DE ZIPAQUIRA', formato: 'documentos' },
   { codigo: '258994003002', juzgado: 'JUZGADO SEGUNDO MUNICIPAL DE ZIPAQUIRA' },
   { codigo: '252004089001', juzgado: 'JUZGADO PRIMERO PROMISCUO MUNICIPAL DE COGUA', formato: 'documentos' },
+  // Despachos que aparecen en el Sheet con procesos "internos" (sin radicado de 23 dígitos).
+  // formato 'auto': cada despacho publica distinto (PDF combinado o documentos sueltos) y
+  // puede cambiar, así que se decide en cada corrida según lo que traiga el listado.
+  { codigo: '252903103001', juzgado: 'JUZGADO PRIMERO CIVIL CIRCUITO DE FUSAGASUGA', formato: 'auto' },
+  { codigo: '252903103002', juzgado: 'JUZGADO SEGUNDO CIVIL CIRCUITO DE FUSAGASUGA', formato: 'auto' },
+  { codigo: '251754003001', juzgado: 'JUZGADO PRIMERO CIVIL MUNICIPAL DE CHIA', formato: 'auto' },
+  { codigo: '251754003003', juzgado: 'JUZGADO TERCERO CIVIL MUNICIPAL DE CHIA', formato: 'auto' },
+  { codigo: '251264089001', juzgado: 'JUZGADO PRIMERO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto' },
+  { codigo: '251264089003', juzgado: 'JUZGADO TERCERO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto' },
+  { codigo: '251264089004', juzgado: 'JUZGADO CUARTO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto' },
 ];
 
 const PORTLET = 'co_com_avanti_efectosProcesales_PublicacionesEfectosProcesalesPortletV2_INSTANCE_BIyXQFHVaYaq';
@@ -53,17 +63,27 @@ const RESPIRO_MS = 3000; // pausa entre despachos, mismo criterio que rastrear.m
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function listarPdfsEstado(idDespacho) {
+// El portal es lento (a veces >1 min por listado): un reintento ante fallo de red.
+async function bajarListado(idDespacho) {
   const qs = new URLSearchParams({
     p_p_id: PORTLET, p_p_lifecycle: '0', p_p_state: 'normal', p_p_mode: 'view',
     [`_${PORTLET}_idStructure`]: ID_STRUCTURE_ESTADOS,
     [`_${PORTLET}_action`]: 'filterStructures',
     [`_${PORTLET}_idDespacho`]: idDespacho,
   });
-  const res = await fetch(`${BASE}?${qs}`, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} listando despacho ${idDespacho}`);
-  const html = await res.text();
-  return parsePdfUrls(html);
+  let ultimo;
+  for (let i = 0; i < 2; i++) {
+    try {
+      const res = await fetch(`${BASE}?${qs}`, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' }, signal: AbortSignal.timeout(180000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status} listando despacho ${idDespacho}`);
+      return await res.text();
+    } catch (e) { ultimo = e; await sleep(5000); }
+  }
+  throw ultimo;
+}
+
+async function listarPdfsEstado(idDespacho) {
+  return parsePdfUrls(await bajarListado(idDespacho));
 }
 
 // Cada "Notificación por Estado" trae un enlace directo a su PDF. El texto
@@ -96,15 +116,7 @@ function parseArticleIds(html) {
 }
 
 async function listarPublicaciones(idDespacho) {
-  const qs = new URLSearchParams({
-    p_p_id: PORTLET, p_p_lifecycle: '0', p_p_state: 'normal', p_p_mode: 'view',
-    [`_${PORTLET}_idStructure`]: ID_STRUCTURE_ESTADOS,
-    [`_${PORTLET}_action`]: 'filterStructures',
-    [`_${PORTLET}_idDespacho`]: idDespacho,
-  });
-  const res = await fetch(`${BASE}?${qs}`, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} listando despacho ${idDespacho}`);
-  return parseArticleIds(await res.text());
+  return parseArticleIds(await bajarListado(idDespacho));
 }
 
 const MESES_ES = { ene: '01', feb: '02', mar: '03', abr: '04', may: '05', jun: '06', jul: '07', ago: '08', sep: '09', oct: '10', nov: '11', dic: '12' };
@@ -147,14 +159,29 @@ async function documentosDePublicacion(articleId) {
 // a la izquierda que varía según el despacho/época (ej. "1996-6774" vs
 // "2024-00200"), así que se compara año + consecutivo SIN ceros a la
 // izquierda en vez de comparar el texto tal cual.
-function radicadoEnNombre(origenIdRaw, nombreDocumento) {
+// También acepta el radicado completo de 23 dígitos (despacho 12 + año 4 +
+// consecutivo 5 + instancia 2), para procesos que el API de la Rama no encuentra.
+function partesRadicado(origenIdRaw) {
   const raw = String(origenIdRaw || '').trim();
-  const m = raw.match(/^(\d{4})-?(\d{3,6})$/);
-  if (!m) return false;
-  const [, anio, numero] = m;
-  const numeroSinCeros = numero.replace(/^0+/, '') || '0';
-  const re = new RegExp(`${anio}-0*${numeroSinCeros}(?!\\d)`);
-  return re.test(nombreDocumento);
+  let m = raw.match(/^(\d{4})-?(\d{3,6})$/);
+  if (!m && /^\d{23}$/.test(raw)) m = [raw, raw.slice(12, 16), raw.slice(16, 21)];
+  if (!m) return null;
+  return { anio: m[1], numeroSinCeros: m[2].replace(/^0+/, '') || '0' };
+}
+
+function radicadoEnNombre(origenIdRaw, nombreDocumento) {
+  const p = partesRadicado(origenIdRaw);
+  if (!p) return false;
+  return new RegExp(`${p.anio}-0*${p.numeroSinCeros}(?!\\d)`).test(nombreDocumento);
+}
+
+// Boletín PDF combinado: busca el texto tal cual (como siempre) y, para
+// radicados de 23 dígitos, también su forma corta "AAAA-NNNNN".
+function radicadoEnTexto(origenIdRaw, texto) {
+  if (texto.includes(origenIdRaw)) return origenIdRaw;
+  if (!/^\d{23}$/.test(String(origenIdRaw))) return null;
+  const p = partesRadicado(origenIdRaw);
+  return texto.match(new RegExp(`(?<!\\d)${p.anio}[- ]0*${p.numeroSinCeros}(?!\\d)`))?.[0] || null;
 }
 
 async function textoPdf(pdfUrl) {
@@ -198,8 +225,8 @@ async function crearAlerta(p, titulo, detalle, fecha, r) {
   r.coincidencias++;
 }
 
-async function revisarDespachoPdf(d, tracked, r) {
-  const pdfs = await listarPdfsEstado(d.codigo);
+async function revisarDespachoPdf(d, tracked, r, listado) {
+  const pdfs = listado?.pdfs ?? await listarPdfsEstado(d.codigo);
   const { data: vistos } = await db.from('estados_pp_vistos')
     .select('file_entry_id').eq('despacho_codigo', d.codigo);
   const vistosSet = new Set((vistos || []).map(v => v.file_entry_id));
@@ -214,8 +241,9 @@ async function revisarDespachoPdf(d, tracked, r) {
       r.estadosNuevos++;
 
       for (const p of tracked) {
-        if (!texto.includes(p.origen_id_raw)) continue;
-        const contexto = extraerContexto(texto, p.origen_id_raw);
+        const hallado = radicadoEnTexto(p.origen_id_raw, texto);
+        if (!hallado) continue;
+        const contexto = extraerContexto(texto, hallado);
         await crearAlerta(p,
           `Movimiento en Publicaciones Procesales — ${p.origen_id_raw}`,
           `${contexto || ''}\n\nBoletín completo: ${pdfUrl}`.trim(), fecha, r);
@@ -234,8 +262,8 @@ async function revisarDespachoPdf(d, tracked, r) {
   }
 }
 
-async function revisarDespachoDocumentos(d, tracked, r) {
-  const articleIds = await listarPublicaciones(d.codigo);
+async function revisarDespachoDocumentos(d, tracked, r, listado) {
+  const articleIds = listado?.articleIds ?? await listarPublicaciones(d.codigo);
   const { data: vistos } = await db.from('estados_pp_vistos')
     .select('file_entry_id').eq('despacho_codigo', d.codigo);
   const vistosSet = new Set((vistos || []).map(v => v.file_entry_id));
@@ -280,11 +308,29 @@ async function main() {
         .not('origen_id_raw', 'is', null);
       if (errProc) throw errProc;
       const tracked = (procesos || []).filter(p => (p.origen_id_raw || '').length >= 6);
+
+      // Procesos de este despacho con radicado de 23 dígitos que el API de la Rama NO
+      // encuentra (nunca se pudieron revisar): se siguen por Publicaciones Procesales.
+      const { data: sinApi } = await db.from('procesos')
+        .select('id, radicado, demandante, demandado')
+        .eq('api_trackable', true).is('ultimo_check_en', null)
+        .like('radicado', `${d.codigo}%`);
+      for (const p of sinApi || []) {
+        if (!tracked.some(t => t.id === p.id)) tracked.push({ ...p, origen_id_raw: p.radicado });
+      }
       if (!tracked.length) { console.log(`(sin procesos) ${d.juzgado}`); continue; }
 
       r.despachosRevisados++;
-      if (d.formato === 'documentos') await revisarDespachoDocumentos(d, tracked, r);
-      else await revisarDespachoPdf(d, tracked, r);
+      let formato = d.formato, listado;
+      if (formato === 'auto') {
+        const html = await bajarListado(d.codigo);
+        const pdfs = parsePdfUrls(html), articleIds = parseArticleIds(html);
+        formato = articleIds.length && pdfs.length < articleIds.length * 0.8 ? 'documentos' : 'pdf';
+        listado = { pdfs, articleIds };
+        console.log(`${d.juzgado}: formato detectado → ${formato} (${pdfs.length} PDF, ${articleIds.length} publicaciones)`);
+      }
+      if (formato === 'documentos') await revisarDespachoDocumentos(d, tracked, r, listado);
+      else await revisarDespachoPdf(d, tracked, r, listado);
     } catch (e) {
       r.errores++;
       console.log(`❌ ${d.juzgado}: ${e.message}`);

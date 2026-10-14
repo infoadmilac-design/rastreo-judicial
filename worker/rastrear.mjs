@@ -41,7 +41,14 @@ async function revisarProceso({ radicado, idProceso, consGuardada, fechaGuardada
   let nuevas = [];
   let actuaciones = null;
   if (cambioProbable) {
-    actuaciones = await obtenerActuaciones(info.idProceso);
+    try {
+      actuaciones = await obtenerActuaciones(info.idProceso);
+    } catch (e) {
+      // El proceso existe pero la Rama todavía no publica actuaciones: no es un error, solo no hay novedades.
+      if (/No se encontraron Actuaciones/i.test(e.message)) actuaciones = [];
+      else if (/proceso privado/i.test(e.message)) return { ok: false, motivo: 'proceso privado: la Rama no muestra sus actuaciones', radicado };
+      else throw e;
+    }
     const tope = consGuardada ?? -1;
     nuevas = actuaciones.filter(a => (a.consActuacion ?? 0) > tope);
   }
