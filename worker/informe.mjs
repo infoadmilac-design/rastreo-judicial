@@ -146,6 +146,13 @@ function textoRevision(ultima) {
 
 // ---------- generar, guardar y enviar ----------
 async function generarYEnviar(tipo, desde, hasta) {
+  // Disparo por cron de GitHub (que llega tarde): si el informe de ese período ya salió, no se repite.
+  if (process.env.OMITIR_SI_YA_ENVIADO) {
+    const { count } = await db.from('informes').select('id', { count: 'exact', head: true })
+      .eq('tipo', tipo).eq('fecha_desde', desde).eq('fecha_hasta', hasta)
+      .gte('creado_en', `${hasta}T00:00:00-05:00`);
+    if (count) { console.log(`Ya se envió el informe ${tipo} de ${desde} a ${hasta}; se omite este disparo.`); return; }
+  }
   const { alertas, runs, ultima } = await datosRango(desde, hasta);
   const filas = armarFilas(alertas);
   const audiencias = armarAudiencias(alertas);

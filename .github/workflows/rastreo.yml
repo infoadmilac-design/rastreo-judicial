@@ -46,21 +46,32 @@ jobs:
           cd worker && npm install --no-audit --no-fund
           cd ../notify && npm install --no-audit --no-fund
 
+      - name: Ver si ya hubo una revisión reciente (solo disparos por cron)
+        # El cron de GitHub llega con horas de atraso; si el disparo puntual ya corrió, no se repite.
+        id: guardia
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        run: cd worker && node guardia-reciente.mjs 6
+
       - name: Rastrear procesos (detecta actuaciones nuevas -> alertas)
+        if: steps.guardia.outputs.omitir != 'true'
         run: cd worker && node rastrear.mjs
 
-      - name: Revisar Publicaciones Procesales (Zipaquira/Cogua, no tienen API)
+      - name: Revisar Publicaciones Procesales (Zipaquira, Cogua, Chia, Cajica y Fusagasuga; sin API)
         # continue-on-error: si el portal cambia de estructura o falla, no debe
         # tumbar el resto de la corrida (que ya quedó guardada en Supabase).
+        if: steps.guardia.outputs.omitir != 'true'
         continue-on-error: true
         run: cd worker && node publicaciones-procesales.mjs
 
       - name: Notificar alertas pendientes (correo + WhatsApp)
         # continue-on-error: si falta configurar algún secreto, este paso no debe
         # tumbar el rastreo (que ya quedó guardado en Supabase).
+        if: steps.guardia.outputs.omitir != 'true'
         continue-on-error: true
         run: cd notify && node notificar.mjs
 
       - name: Enviar informe de la corrida por WhatsApp
+        if: steps.guardia.outputs.omitir != 'true'
         continue-on-error: true
         run: cd worker && node resumen-corrida.mjs

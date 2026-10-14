@@ -49,10 +49,12 @@ const DESPACHOS = [
   // puede cambiar, así que se decide en cada corrida según lo que traiga el listado.
   { codigo: '252903103001', juzgado: 'JUZGADO PRIMERO CIVIL CIRCUITO DE FUSAGASUGA', formato: 'auto' },
   { codigo: '252903103002', juzgado: 'JUZGADO SEGUNDO CIVIL CIRCUITO DE FUSAGASUGA', formato: 'auto' },
-  { codigo: '251754003001', juzgado: 'JUZGADO PRIMERO CIVIL MUNICIPAL DE CHIA', formato: 'auto' },
-  { codigo: '251754003003', juzgado: 'JUZGADO TERCERO CIVIL MUNICIPAL DE CHIA', formato: 'auto' },
-  { codigo: '251264089001', juzgado: 'JUZGADO PRIMERO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto' },
-  { codigo: '251264089003', juzgado: 'JUZGADO TERCERO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto' },
+  // "ids": procesos de la pestaña GENERALES del Sheet que están bajo ese juzgado pero se
+  // cargaron sin juzgado; si siguen sin él, se les asigna aquí (y se guardan en la BD).
+  { codigo: '251754003001', juzgado: 'JUZGADO PRIMERO CIVIL MUNICIPAL DE CHIA', formato: 'auto', ids: ['201700551', '202200287'] },
+  { codigo: '251754003003', juzgado: 'JUZGADO TERCERO CIVIL MUNICIPAL DE CHIA', formato: 'auto', ids: ['202501003', '202501205', '202500459'] },
+  { codigo: '251264089001', juzgado: 'JUZGADO PRIMERO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto', ids: ['202400205', '202400323'] },
+  { codigo: '251264089003', juzgado: 'JUZGADO TERCERO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto', ids: ['202500402'] },
   { codigo: '251264089004', juzgado: 'JUZGADO CUARTO PROMISCUO MUNICIPAL DE CAJICA', formato: 'auto' },
 ];
 
@@ -308,6 +310,15 @@ async function main() {
         .not('origen_id_raw', 'is', null);
       if (errProc) throw errProc;
       const tracked = (procesos || []).filter(p => (p.origen_id_raw || '').length >= 6);
+
+      if (d.ids?.length) {
+        const { data: sinJuzgado } = await db.from('procesos')
+          .select('id, origen_id_raw, demandante, demandado').is('juzgado', null).in('origen_id_raw', d.ids);
+        for (const p of sinJuzgado || []) {
+          await db.from('procesos').update({ juzgado: d.juzgado }).eq('id', p.id);
+          if (!tracked.some(t => t.id === p.id)) tracked.push(p);
+        }
+      }
 
       // Procesos de este despacho con radicado de 23 dígitos que el API de la Rama NO
       // encuentra (nunca se pudieron revisar): se siguen por Publicaciones Procesales.

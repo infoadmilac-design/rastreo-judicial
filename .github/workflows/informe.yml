@@ -35,6 +35,8 @@ jobs:
       # Disparo programado: el cron decide cual informe es y a que hora se envia.
       MODO: ${{ github.event_name == 'workflow_dispatch' && inputs.tipo || (github.event.schedule == '17 23 * * 5' && 'semanal' || 'diario') }}
       ESPERAR_HASTA: ${{ github.event_name == 'schedule' && (github.event.schedule == '17 23 * * 5' && '18:30' || '18:00') || '' }}
+      # Si el informe de ese día ya salió (p. ej. por disparo puntual), el cron tardío no lo repite.
+      OMITIR_SI_YA_ENVIADO: ${{ github.event_name == 'schedule' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
