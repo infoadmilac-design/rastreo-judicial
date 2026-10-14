@@ -1,0 +1,49 @@
+name: Publicaciones Procesales (estados de los juzgados)
+
+# Algunos juzgados (Zipaquira, Cogua, Chia, Cajica, Fusagasuga) no estan en el API de la
+# Rama: sus movimientos nuevos solo salen en el boletin/estado que cada juzgado publica
+# en publicacionesprocesales.ramajudicial.gov.co. Este workflow entra a cada juzgado, baja
+# los boletines nuevos, busca nuestros procesos y, si aparecen, crea la alerta.
+# Dura pocos minutos, asi que corre varias veces al dia (lo dispara Supabase pg_cron;
+# ver docs/horarios-puntuales.sql). El cron de abajo es solo un respaldo.
+on:
+  schedule:
+    - cron: '41 15 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: publicaciones
+  cancel-in-progress: false
+
+jobs:
+  publicaciones:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      EMAIL_CENTRAL: ${{ secrets.EMAIL_CENTRAL }}
+      WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+      WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+      WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
+      WHATSAPP_LANG: ${{ secrets.WHATSAPP_LANG }}
+      WHATSAPP_CENTRAL: ${{ secrets.WHATSAPP_CENTRAL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependencias
+        run: |
+          cd worker && npm install --no-audit --no-fund
+          cd ../notify && npm install --no-audit --no-fund
+
+      - name: Revisar los estados de los juzgados
+        run: cd worker && node publicaciones-procesales.mjs
+
+      - name: Notificar alertas pendientes (WhatsApp)
+        continue-on-error: true
+        run: cd notify && node notificar.mjs

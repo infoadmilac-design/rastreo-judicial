@@ -57,12 +57,8 @@ jobs:
         if: steps.guardia.outputs.omitir != 'true'
         run: cd worker && node rastrear.mjs
 
-      - name: Revisar Publicaciones Procesales (Zipaquira, Cogua, Chia, Cajica y Fusagasuga; sin API)
-        # continue-on-error: si el portal cambia de estructura o falla, no debe
-        # tumbar el resto de la corrida (que ya quedó guardada en Supabase).
-        if: steps.guardia.outputs.omitir != 'true'
-        continue-on-error: true
-        run: cd worker && node publicaciones-procesales.mjs
+      # Los estados de los juzgados sin API (Publicaciones Procesales) ahora corren aparte,
+      # varias veces al dia: ver publicaciones.yml.
 
       - name: Notificar alertas pendientes (correo + WhatsApp)
         # continue-on-error: si falta configurar algún secreto, este paso no debe
