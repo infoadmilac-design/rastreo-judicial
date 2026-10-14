@@ -65,7 +65,22 @@ const RESPIRO_MS = 3000; // pausa entre despachos, mismo criterio que rastrear.m
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// El portal es lento (a veces >1 min por listado): un reintento ante fallo de red.
+// El portal de la Rama es inestable: a veces contesta un 404 de Tomcat en 1 s (un nodo sin
+// el portlet) y a veces se cuelga minutos. Cuando contesta lo hace rápido, así que se usan
+// timeouts cortos y varios reintentos (el siguiente intento suele caer en un nodo sano).
+async function pedir(url, { intentos = 4, timeoutMs = 60000, leer = 'text' } = {}) {
+  let ultimo;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' }, signal: AbortSignal.timeout(timeoutMs) });
+      if (res.ok) return leer === 'buffer' ? Buffer.from(await res.arrayBuffer()) : await res.text();
+      ultimo = new Error(`HTTP ${res.status}`);
+    } catch (e) { ultimo = e; }
+    await sleep(2000 * (i + 1));
+  }
+  throw ultimo;
+}
+
 async function bajarListado(idDespacho) {
   const qs = new URLSearchParams({
     p_p_id: PORTLET, p_p_lifecycle: '0', p_p_state: 'normal', p_p_mode: 'view',
@@ -73,15 +88,8 @@ async function bajarListado(idDespacho) {
     [`_${PORTLET}_action`]: 'filterStructures',
     [`_${PORTLET}_idDespacho`]: idDespacho,
   });
-  let ultimo;
-  for (let i = 0; i < 2; i++) {
-    try {
-      const res = await fetch(`${BASE}?${qs}`, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' }, signal: AbortSignal.timeout(180000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status} listando despacho ${idDespacho}`);
-      return await res.text();
-    } catch (e) { ultimo = e; await sleep(5000); }
-  }
-  throw ultimo;
+  try { return await pedir(`${BASE}?${qs}`); }
+  catch (e) { throw new Error(`${e.message} listando despacho ${idDespacho}`); }
 }
 
 async function listarPdfsEstado(idDespacho) {
@@ -139,9 +147,9 @@ async function documentosDePublicacion(articleId) {
     [`_${PORTLET}_jspPage`]: '/META-INF/resources/detail.jsp',
     [`_${PORTLET}_articleId`]: articleId,
   });
-  const res = await fetch(`${BASE}?${qs}`, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} en detalle de publicación ${articleId}`);
-  const html = await res.text();
+  let html;
+  try { html = await pedir(`${BASE}?${qs}`); }
+  catch (e) { throw new Error(`${e.message} en detalle de publicación ${articleId}`); }
 
   const documentos = [...html.matchAll(/href="(\/c\/document_library\/get_file\?uuid=[0-9a-f-]+&groupId=\d+)"[^>]*>\s*([^<]+?)\s*<\/a>/g)]
     .map(([, relUrl, nombre]) => ({
@@ -187,9 +195,9 @@ function radicadoEnTexto(origenIdRaw, texto) {
 }
 
 async function textoPdf(pdfUrl) {
-  const res = await fetch(pdfUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (rastreo-judicial-bot)' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status} descargando PDF`);
-  const buf = Buffer.from(await res.arrayBuffer());
+  let buf;
+  try { buf = await pedir(pdfUrl, { leer: 'buffer' }); }
+  catch (e) { throw new Error(`${e.message} descargando PDF`); }
   const parser = new PDFParse({ data: buf });
   const { text } = await parser.getText();
   return text;
@@ -302,7 +310,7 @@ async function revisarDespachoDocumentos(d, tracked, r, listado) {
 async function main() {
   const r = { despachosRevisados: 0, estadosNuevos: 0, coincidencias: 0, errores: 0 };
 
-  for (const d of DESPACHOS) {
+  const procesarDespacho = async d => {
     try {
       const { data: procesos, error: errProc } = await db.from('procesos')
         .select('id, origen_id_raw, demandante, demandado')
@@ -329,7 +337,7 @@ async function main() {
       for (const p of sinApi || []) {
         if (!tracked.some(t => t.id === p.id)) tracked.push({ ...p, origen_id_raw: p.radicado });
       }
-      if (!tracked.length) { console.log(`(sin procesos) ${d.juzgado}`); continue; }
+      if (!tracked.length) { console.log(`(sin procesos) ${d.juzgado}`); return; }
 
       r.despachosRevisados++;
       let formato = d.formato, listado;
@@ -347,7 +355,18 @@ async function main() {
       console.log(`❌ ${d.juzgado}: ${e.message}`);
     }
     await sleep(RESPIRO_MS);
-  }
+  };
+
+  // Varios juzgados a la vez (el portal es lento) y un tope de tiempo: lo que no alcance a
+  // revisarse queda para la siguiente corrida (los boletines ya vistos no se repiten).
+  const LIMITE_MS = 50 * 60000, CONCURRENCIA = 3, inicio = Date.now();
+  const cola = [...DESPACHOS];
+  await Promise.all(Array.from({ length: CONCURRENCIA }, async () => {
+    while (cola.length) {
+      if (Date.now() - inicio > LIMITE_MS) { console.log('⏱️ Tiempo límite: el resto de juzgados queda para la próxima corrida.'); return; }
+      await procesarDespacho(cola.shift());
+    }
+  }));
 
   console.log('\n===== RESUMEN Publicaciones Procesales =====');
   console.log(`Despachos revisados : ${r.despachosRevisados}/${DESPACHOS.length}`);
