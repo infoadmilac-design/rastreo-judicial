@@ -20,7 +20,7 @@
 //  WHATSAPP_PHONE_ID, WHATSAPP_CENTRAL, WHATSAPP_LANG).
 // =====================================================================
 import { createClient } from '@supabase/supabase-js';
-import { subirMedia, enviarPlantillaConDocumento } from '../notify/whatsapp.mjs';
+import { subirMedia, enviarPlantillaConDocumento, enviarPlantilla } from '../notify/whatsapp.mjs';
 import { generarPDF } from './informe-pdf.mjs';
 
 const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_KEY;
@@ -148,9 +148,10 @@ function textoRevision(ultima) {
 async function generarYEnviar(tipo, desde, hasta) {
   // Disparo por cron de GitHub (que llega tarde): si el informe de ese período ya salió, no se repite.
   if (process.env.OMITIR_SI_YA_ENVIADO) {
-    const { count } = await db.from('informes').select('id', { count: 'exact', head: true })
+    const { data: previos } = await db.from('informes').select('id, resumen')
       .eq('tipo', tipo).eq('fecha_desde', desde).eq('fecha_hasta', hasta)
       .gte('creado_en', `${hasta}T00:00:00-05:00`);
+    const count = (previos || []).filter(p => p.resumen?.enviado).length;   // solo cuenta si de verdad se envió
     if (count) { console.log(`Ya se envió el informe ${tipo} de ${desde} a ${hasta}; se omite este disparo.`); return; }
   }
   const { alertas, runs, ultima } = await datosRango(desde, hasta);
@@ -206,10 +207,22 @@ async function generarYEnviar(tipo, desde, hasta) {
       to: waCentral, mediaId, filename,
       params: [tipo === 'semanal' ? 'informe semanal' : 'informe diario', rango, String(filas.length), String(revisiones)],
     });
+    await db.from('informes').update({ resumen: { ...resumen, enviado: true } }).eq('id', row.id);
     console.log(`✅ Informe ${tipo} enviado por WhatsApp como documento adjunto.`);
   } catch (e) {
     console.error(`❌ No se pudo enviar el informe ${tipo} como documento:`, e.message);
     process.exitCode = 1;
+    // Último recurso: que al menos llegue un aviso con el resumen y el enlace al PDF (no un silencio total).
+    try {
+      const dashboard = process.env.DASHBOARD_URL || 'https://rastreo-judicial.onrender.com';
+      await enviarPlantilla({ to: waCentral, params: [
+        `📄 Informe ${tipo} (no se pudo adjuntar el PDF)`,
+        `${rango}: ${filas.length} proceso(s) con movimiento`,
+        `PDF: ${dashboard}/api/informes/${row.id}.pdf`,
+      ] });
+      await db.from('informes').update({ resumen: { ...resumen, enviado: true, solo_enlace: true } }).eq('id', row.id);
+      console.log('Se mandó el aviso con enlace como respaldo.');
+    } catch (e2) { console.error('❌ Tampoco se pudo mandar el aviso de respaldo:', e2.message); }
   }
 }
 

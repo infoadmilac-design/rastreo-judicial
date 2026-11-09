@@ -62,7 +62,7 @@ async function correrProduccion() {
   const dashboardUrl = process.env.DASHBOARD_URL || 'https://rastreo-judicial.onrender.com';
   const { data: alertas, error } = await db
     .from('alertas')
-    .select(`id, tipo, detalle, proceso_id, actuacion_id, audiencia_id,
+    .select(`id, tipo, detalle, creado_en, proceso_id, actuacion_id, audiencia_id,
       procesos(radicado, despacho, clientes(nombre)),
       actuaciones(fecha_actuacion, tipo, anotacion, con_documentos),
       audiencias(fecha, hora, descripcion, lugar, clientes(nombre), procesos(radicado))`)
@@ -78,9 +78,24 @@ async function correrProduccion() {
   const individuales = alertas.filter(al => !esDiaAntes(al));
 
   if (individuales.length > LIMITE_SEGURIDAD) {
-    console.error(`⚠️  Hay más de ${LIMITE_SEGURIDAD} alertas individuales pendientes de golpe (posible corrida duplicada u otro problema). ` +
-      `No se envía nada por WhatsApp/correo para evitar un bombardeo — revisa la tabla "alertas" en Supabase antes de continuar.`);
-    process.exit(1);
+    // Antes aquí se salía sin enviar nada: como las alertas pendientes nunca se descartaban,
+    // el sistema quedaba bloqueado para siempre (se acumularon 100+ alertas sin avisar).
+    // Ahora se manda UN solo aviso con el conteo y se marcan como notificadas; el detalle
+    // de cada una sigue en el dashboard.
+    const masVieja = (alertas.map(a => a.creado_en).filter(Boolean).sort()[0] || '').slice(0, 10);
+    console.error(`⚠️  Hay ${individuales.length} alertas individuales pendientes (más de ${LIMITE_SEGURIDAD}). ` +
+      `Se manda un solo aviso en vez de ${individuales.length} mensajes.`);
+    if (!waCentral) { console.error('Sin WHATSAPP_CENTRAL: no se puede mandar el aviso.'); process.exit(1); }
+    try {
+      await enviarPlantilla({ to: waCentral, params: [
+        `⚠️ ${individuales.length} alertas acumuladas`,
+        masVieja ? `desde el ${masVieja}` : 'pendientes',
+        `Revísalas en el dashboard: ${dashboardUrl}`,
+      ] });
+    } catch (e) { console.error(`❌ No se pudo mandar el aviso: ${e.message}`); process.exit(1); }
+    await db.from('alertas').update({ estado: 'notificada' }).in('id', individuales.map(a => a.id));
+    console.log(`Aviso enviado; ${individuales.length} alertas marcadas como notificadas.`);
+    return;
   }
 
   console.log(`Enviando ${individuales.length} alerta(s) individual(es)${diaAntes.length ? ` + 1 resumen diario (${diaAntes.length} evento(s))` : ''}…`);
