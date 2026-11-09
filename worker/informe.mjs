@@ -94,7 +94,7 @@ async function datosRango(desde, hasta) {
   if (errR) throw errR;
 
   const { data: ultima } = await db.from('rastreo_runs')
-    .select('estado, total, procesados, errores, iniciado_en, terminado_en')
+    .select('estado, total, procesados, errores, detalle_errores, iniciado_en, terminado_en')
     .order('iniciado_en', { ascending: false }).limit(1).maybeSingle();
 
   return { alertas: alertas || [], runs: runs || [], ultima };
@@ -136,6 +136,31 @@ function armarAudiencias(alertas) {
   }));
 }
 
+// Procesos que NO se pudieron revisar en las últimas 30 h (error de la Rama o del portal del
+// juzgado, o sin forma de revisarlos automáticamente), con radicado, cliente y motivo.
+async function procesosNoRevisados(ultima) {
+  const { data: procs } = await db.from('procesos')
+    .select('id, radicado, origen_id_raw, demandado, demandante, juzgado, api_trackable, estado, ultimo_check_en, clientes(nombre)')
+    .limit(2000);
+  const limite = Date.now() - 30 * 3600 * 1000;
+  const errPorRad = new Map((ultima?.detalle_errores || []).map(e => [e.radicado, e.motivo]));
+  const desde = p => fmtCorta(fechaBogota(p.ultimo_check_en));
+  const out = [];
+  for (const p of procs || []) {
+    if (p.ultimo_check_en && new Date(p.ultimo_check_en).getTime() > limite) continue;   // revisado hace poco
+    if (!p.api_trackable && p.estado !== 'activo') continue;                             // archivado sin API: no se espera revisión
+    let motivo;
+    if (p.api_trackable) {
+      const m = errPorRad.get(p.radicado);
+      motivo = m ? `Error al consultar la Rama: ${m}`
+        : p.ultimo_check_en ? `Sin revisión exitosa desde el ${desde(p)}` : 'Todavía no se ha podido revisar';
+    } else if (!p.juzgado) motivo = 'Sin juzgado asignado: no hay dónde revisarlo automáticamente';
+    else motivo = p.ultimo_check_en ? `El portal del juzgado no respondió desde el ${desde(p)}` : `Sin lectura automática del juzgado: ${p.juzgado}`;
+    out.push({ id: p.radicado || p.origen_id_raw || '-', cliente: p.clientes?.nombre || '-', demandado: p.demandado || p.demandante || '-', motivo });
+  }
+  return out.sort((a, b) => a.motivo.localeCompare(b.motivo) || a.id.localeCompare(b.id));
+}
+
 function textoRevision(ultima) {
   if (!ultima) return null;
   if (ultima.estado === 'corriendo')
@@ -157,6 +182,7 @@ async function generarYEnviar(tipo, desde, hasta) {
   const { alertas, runs, ultima } = await datosRango(desde, hasta);
   const filas = armarFilas(alertas);
   const audiencias = armarAudiencias(alertas);
+  const noRevisados = await procesosNoRevisados(ultima);
   const movimientos = filas.reduce((s, f) => s + f.n, 0);
   const revisiones = runs.reduce((s, r) => s + (r.procesados || 0), 0);
   const errores = runs.reduce((s, r) => s + (r.errores || 0), 0);
@@ -186,7 +212,7 @@ async function generarYEnviar(tipo, desde, hasta) {
       { valor: errores, etiqueta: 'Sin respuesta del portal' },
     ],
     estadoRevision: textoRevision(ultima),
-    filas, audiencias, porDia,
+    filas, audiencias, porDia, noRevisados,
   });
 
   const { data: row, error } = await db.from('informes')

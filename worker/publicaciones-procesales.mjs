@@ -332,7 +332,7 @@ async function main() {
       // encuentra (nunca se pudieron revisar): se siguen por Publicaciones Procesales.
       const { data: sinApi } = await db.from('procesos')
         .select('id, radicado, demandante, demandado')
-        .eq('api_trackable', true).is('ultimo_check_en', null)
+        .eq('api_trackable', true).is('id_cpnu', null)
         .like('radicado', `${d.codigo}%`);
       for (const p of sinApi || []) {
         if (!tracked.some(t => t.id === p.id)) tracked.push({ ...p, origen_id_raw: p.radicado });
@@ -348,8 +348,14 @@ async function main() {
         listado = { pdfs, articleIds };
         console.log(`${d.juzgado}: formato detectado → ${formato} (${pdfs.length} PDF, ${articleIds.length} publicaciones)`);
       }
-      if (formato === 'documentos') await revisarDespachoDocumentos(d, tracked, r, listado);
-      else await revisarDespachoPdf(d, tracked, r, listado);
+      const rl = { estadosNuevos: 0, coincidencias: 0, errores: 0 };   // conteo propio de este juzgado
+      if (formato === 'documentos') await revisarDespachoDocumentos(d, tracked, rl, listado);
+      else await revisarDespachoPdf(d, tracked, rl, listado);
+      r.estadosNuevos += rl.estadosNuevos; r.coincidencias += rl.coincidencias; r.errores += rl.errores;
+      // Si el juzgado se pudo leer completo, esos procesos cuentan como revisados (el informe lista los que no).
+      if (rl.errores === 0) {
+        await db.from('procesos').update({ ultimo_check_en: new Date().toISOString() }).in('id', tracked.map(t => t.id));
+      }
     } catch (e) {
       r.errores++;
       console.log(`❌ ${d.juzgado}: ${e.message}`);

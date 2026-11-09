@@ -20,7 +20,7 @@ const PIE = 34; // espacio reservado abajo para el pie de página
 // Helvetica estándar solo dibuja WinAnsi: quita emojis y símbolos raros.
 const limpiar = s => String(s ?? '').replace(/[^\n\x20-\x7E\xA0-\xFF–—‘’“”•…]/g, '').replace(/[^\S\n]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
 
-export function generarPDF({ tipo, titulo, subtitulo, kpis, estadoRevision, filas, audiencias, porDia }) {
+export function generarPDF({ tipo, titulo, subtitulo, kpis, estadoRevision, filas, audiencias, porDia, noRevisados }) {
   return new Promise(resolve => {
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: M, bufferPages: true });
     const chunks = [];
@@ -128,6 +128,19 @@ export function generarPDF({ tipo, titulo, subtitulo, kpis, estadoRevision, fila
       seccion('AUDIENCIAS Y VENCIMIENTOS');
       tabla([{ t: 'FECHA', w: 80 }, { t: 'HORA', w: 70 }, { t: 'CLIENTE', w: 170 }, { t: 'DESCRIPCIÓN', w: 330, align: 'left' }],
         audiencias.map(a => [{ t: a.fecha, bold: true }, a.hora, a.cliente, a.descripcion]), { size: 11 });
+    }
+
+    // Procesos que el sistema no pudo revisar (error del portal, sin API, sin juzgado asignado…)
+    if (noRevisados) {
+      seccion(`PROCESOS QUE NO SE PUDIERON REVISAR (${noRevisados.length})`);
+      if (!noRevisados.length) {
+        doc.lineWidth(2).rect(M, y, CW, 50).fillAndStroke(AZUL, NEGRO);
+        doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(14).text('Todos los procesos se pudieron revisar', M, y + 17, { width: CW, align: 'center', lineBreak: false });
+        y += 66;
+      } else {
+        tabla([{ t: 'N°', w: 34 }, { t: 'ID PROCESO', w: 160 }, { t: 'CLIENTE', w: 150 }, { t: 'DEMANDADO', w: 130 }, { t: 'MOTIVO', w: 290, align: 'left' }],
+          noRevisados.map((p, i) => [{ t: String(i + 1), bold: true }, { t: p.id, bold: true }, p.cliente, p.demandado, p.motivo]), { size: 10.5 });
+      }
     }
 
     // ---------- pie de página ----------
