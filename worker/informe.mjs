@@ -211,6 +211,7 @@ async function generarYEnviar(tipo, desde, hasta) {
     console.log(`✅ Informe ${tipo} enviado por WhatsApp como documento adjunto.`);
   } catch (e) {
     console.error(`❌ No se pudo enviar el informe ${tipo} como documento:`, e.message);
+    console.log(`::error title=Informe ${tipo}::${String(e.message).replace(/s+/g, ' ').slice(0, 400)}`);
     process.exitCode = 1;
     // Último recurso: que al menos llegue un aviso con el resumen y el enlace al PDF (no un silencio total).
     try {

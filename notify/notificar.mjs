@@ -92,7 +92,7 @@ async function correrProduccion() {
         masVieja ? `desde el ${masVieja}` : 'pendientes',
         `Revísalas en el dashboard: ${dashboardUrl}`,
       ] });
-    } catch (e) { console.error(`❌ No se pudo mandar el aviso: ${e.message}`); process.exit(1); }
+    } catch (e) { console.error(`❌ No se pudo mandar el aviso: ${e.message}`); console.log(`::error title=Aviso de alertas acumuladas::${String(e.message).replace(/s+/g, ' ').slice(0, 400)}`); process.exit(1); }
     await db.from('alertas').update({ estado: 'notificada' }).in('id', individuales.map(a => a.id));
     console.log(`Aviso enviado; ${individuales.length} alertas marcadas como notificadas.`);
     return;
@@ -153,6 +153,7 @@ async function correrProduccion() {
         algunaOk = true;
       } catch (e) {
         await db.from('notificaciones').update({ estado: 'fallida', error: e.message }).eq('id', notif.id);
+        console.log(`::error title=WhatsApp::${String(e.message).replace(/s+/g, ' ').slice(0, 400)}`);
         console.log(`   ❌ [whatsapp] ${p.radicado || al.titulo}: ${e.message}`);
       }
     }
